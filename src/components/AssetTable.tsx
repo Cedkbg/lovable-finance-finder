@@ -150,7 +150,11 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
                     }`}
                     title={String(asset[col.key] || "")}
                   >
-                    {asset[col.key] || "—"}
+                    {col.key === "source" ? (
+                      <SourceBadge source={String(asset[col.key] || "")} />
+                    ) : (
+                      asset[col.key] || "—"
+                    )}
                   </TableCell>
                 ))}
               </TableRow>
