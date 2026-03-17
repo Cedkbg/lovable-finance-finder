@@ -145,15 +145,26 @@ const BulkImport = ({ onSelectResult }: BulkImportProps) => {
 
               {results.length > 0 && !loading && (
                 <div className="mt-3 space-y-2">
-                  <div className="flex gap-3 font-mono text-xs">
-                    <span className="text-[hsl(var(--success))]">
-                      <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />
-                      {found.length} FOUND
-                    </span>
-                    <span className="text-destructive">
-                      <XCircle className="w-3.5 h-3.5 inline mr-1" />
-                      {notFound.length} NOT_FOUND
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3 font-mono text-xs">
+                      <span className="text-[hsl(var(--success))]">
+                        <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />
+                        {found.length} FOUND
+                      </span>
+                      <span className="text-destructive">
+                        <XCircle className="w-3.5 h-3.5 inline mr-1" />
+                        {notFound.length} NOT_FOUND
+                      </span>
+                    </div>
+                    {found.length > 0 && (
+                      <button
+                        onClick={() => exportToExcel(found.map((r) => r.asset!),"bulk_enriched")}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary text-primary-foreground font-mono text-[10px] font-medium hover:bg-primary/90 transition-colors"
+                      >
+                        <Download className="w-3 h-3" />
+                        EXPORT XLSX
+                      </button>
+                    )}
                   </div>
 
                   <div className="max-h-48 overflow-y-auto space-y-1">
