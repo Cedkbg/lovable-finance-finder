@@ -95,7 +95,7 @@ const Index = () => {
     if (e.key === "Enter") handleSearch();
   };
 
-  const srcInfo = SOURCE_ICONS[source];
+  const hasResults = results.length > 0;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
