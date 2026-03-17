@@ -137,7 +137,7 @@ const Index = () => {
 
       {/* Search */}
       <div className="p-4 bg-card/50 border-b border-border">
-        <div className="relative max-w-2xl mx-auto">
+        <div className="relative max-w-4xl mx-auto">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
