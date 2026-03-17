@@ -22,6 +22,7 @@ const COLUMNS: { key: keyof FinancialAsset; label: string }[] = [
   { key: "id", label: "ID" },
   { key: "assetName", label: "Asset Name" },
   { key: "isin", label: "ISIN" },
+  { key: "source", label: "Source" },
   { key: "sector", label: "Sector" },
   { key: "acf", label: "ACF" },
   { key: "ric", label: "RIC" },
