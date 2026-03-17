@@ -57,9 +57,9 @@ const Index = () => {
 
     setQuery(q);
     setLoading(true);
-    setResult(null);
+    setResults([]);
     setNotFound(false);
-    setSource("");
+    setResultTitle("");
     setShowHistory(false);
 
     const { asset, source: src } = await searchAsset(q);
@@ -67,17 +67,29 @@ const Index = () => {
     addEntry({ query: q, assetName: asset?.assetName || null, source: src });
 
     if (asset) {
-      setResult(asset);
-      setSource(src);
+      setResults([asset]);
+      setResultTitle(SOURCE_ICONS[src]?.label || "DATA_RETRIEVED_OK");
       refreshCount();
-      const srcInfo = SOURCE_ICONS[src];
-      toast(srcInfo?.label || "DATA_RETRIEVED_OK", { duration: 2000 });
+      toast(SOURCE_ICONS[src]?.label || "DATA_RETRIEVED_OK", { duration: 2000 });
     } else {
       setNotFound(true);
     }
 
     setLoading(false);
   }, [query, addEntry]);
+
+  const handleCountryResults = (assets: FinancialAsset[], country: string) => {
+    if (assets.length > 0) {
+      setResults(assets);
+      setResultTitle(`${assets.length} ASSETS — ${country.toUpperCase()}`);
+      setNotFound(false);
+      toast(`${assets.length} actifs trouvés pour "${country}"`, { duration: 2000 });
+    } else {
+      setResults([]);
+      setNotFound(true);
+      setQuery(country);
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleSearch();
