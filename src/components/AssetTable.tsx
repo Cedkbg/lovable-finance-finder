@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
-import { Download, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, Filter, ChevronLeft, ChevronRight, Database, HardDrive, Wifi } from "lucide-react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import type { FinancialAsset } from "@/lib/mock-data";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableHeader,
@@ -22,6 +23,7 @@ const COLUMNS: { key: keyof FinancialAsset; label: string }[] = [
   { key: "id", label: "ID" },
   { key: "assetName", label: "Asset Name" },
   { key: "isin", label: "ISIN" },
+  { key: "source", label: "Source" },
   { key: "sector", label: "Sector" },
   { key: "acf", label: "ACF" },
   { key: "ric", label: "RIC" },
@@ -36,6 +38,24 @@ const COLUMNS: { key: keyof FinancialAsset; label: string }[] = [
   { key: "createdAt", label: "Created At" },
   { key: "updatedAt", label: "Updated At" },
 ];
+
+const SOURCE_CONFIG: Record<string, { label: string; icon: typeof Database; className: string }> = {
+  database: { label: "DB", icon: Database, className: "bg-primary/10 text-primary border-primary/20" },
+  local_dataset: { label: "LOCAL", icon: HardDrive, className: "bg-accent text-accent-foreground border-accent" },
+  openfigi: { label: "FIGI", icon: Wifi, className: "bg-destructive/10 text-destructive border-destructive/20" },
+  manual: { label: "MANUAL", icon: Database, className: "bg-muted text-muted-foreground border-border" },
+};
+
+function SourceBadge({ source }: { source: string }) {
+  const config = SOURCE_CONFIG[source] || SOURCE_CONFIG.manual;
+  const Icon = config.icon;
+  return (
+    <Badge variant="outline" className={`text-[9px] font-mono gap-1 px-1.5 py-0.5 ${config.className}`}>
+      <Icon className="w-2.5 h-2.5" />
+      {config.label}
+    </Badge>
+  );
+}
 
 const PAGE_SIZE = 25;
 
@@ -148,7 +168,11 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
                     }`}
                     title={String(asset[col.key] || "")}
                   >
-                    {asset[col.key] || "—"}
+                    {col.key === "source" ? (
+                      <SourceBadge source={String(asset[col.key] || "")} />
+                    ) : (
+                      asset[col.key] || "—"
+                    )}
                   </TableCell>
                 ))}
               </TableRow>
