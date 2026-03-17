@@ -163,9 +163,9 @@ const Index = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 max-w-2xl mx-auto w-full p-4 space-y-4">
+      <div className="flex-1 w-full p-4 space-y-4 overflow-x-auto">
         <AnimatePresence>
-          {showHistory && !loading && !result && (
+          {showHistory && !loading && !hasResults && (
             <SearchHistory key="history" history={history} onSelect={(q) => handleSearch(q)} onClear={clearHistory} />
           )}
         </AnimatePresence>
@@ -173,15 +173,9 @@ const Index = () => {
         <AnimatePresence mode="wait">
           {loading && <SkeletonGrid key="skeleton" />}
 
-          {result && !loading && (
+          {hasResults && !loading && (
             <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              {srcInfo && (
-                <div className="flex items-center gap-2 px-4 py-2 mb-3 rounded-lg bg-primary/5 border border-primary/10">
-                  <srcInfo.icon className="w-3.5 h-3.5 text-primary" />
-                  <span className="font-mono text-[10px] text-primary font-medium">{srcInfo.label}</span>
-                </div>
-              )}
-              <DataGrid data={result} />
+              <AssetTable assets={results} title={resultTitle} />
             </motion.div>
           )}
 
@@ -197,14 +191,14 @@ const Index = () => {
             </motion.div>
           )}
 
-          {!result && !loading && !notFound && !showHistory && (
+          {!hasResults && !loading && !notFound && !showHistory && (
             <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-16">
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
                 <Search className="w-7 h-7 text-primary" />
               </div>
               <p className="font-semibold text-foreground text-sm">Prêt à enrichir</p>
               <p className="text-muted-foreground text-xs mt-1 text-center max-w-sm">
-                Entrez un ISIN ou ticker pour obtenir toutes les données financières
+                Entrez un ISIN, ticker ou pays pour obtenir toutes les données financières
               </p>
 
               <div className="mt-5 flex flex-wrap gap-1.5 justify-center items-center">
@@ -230,7 +224,7 @@ const Index = () => {
               </div>
 
               {history.length > 0 && (
-                <div className="mt-8 w-full">
+                <div className="mt-8 w-full max-w-2xl">
                   <SearchHistory history={history.slice(0, 5)} onSelect={(q) => handleSearch(q)} onClear={clearHistory} />
                 </div>
               )}
