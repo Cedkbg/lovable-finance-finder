@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
-import { Download, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, Filter, ChevronLeft, ChevronRight, Database, HardDrive, Wifi } from "lucide-react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import type { FinancialAsset } from "@/lib/mock-data";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableHeader,
