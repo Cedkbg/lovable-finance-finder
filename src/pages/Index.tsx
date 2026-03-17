@@ -24,8 +24,8 @@ const SOURCE_ICONS: Record<string, { icon: typeof Database; label: string }> = {
 const Index = () => {
   const { user, profile, signOut } = useAuth();
   const [query, setQuery] = useState("");
-  const [result, setResult] = useState<FinancialAsset | null>(null);
-  const [source, setSource] = useState("");
+  const [results, setResults] = useState<FinancialAsset[]>([]);
+  const [resultTitle, setResultTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [dbCount, setDbCount] = useState(0);
