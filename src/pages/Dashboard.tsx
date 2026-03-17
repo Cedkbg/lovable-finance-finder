@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { ArrowLeft, Database, Globe, Briefcase, Wifi, Loader2 } from "lucide-react";
+import { ArrowLeft, Database, Globe, Briefcase, Wifi, Loader2, UserCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 import ThemeToggle from "@/components/ThemeToggle";
 import type { DbAsset } from "@/lib/asset-service";
