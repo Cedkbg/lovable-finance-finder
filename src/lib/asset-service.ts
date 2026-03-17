@@ -17,6 +17,7 @@ export interface DbAsset {
   currency: string | null;
   description: string | null;
   source: string | null;
+  user_id: string | null;
   created_at: string;
   updated_at: string;
 }
