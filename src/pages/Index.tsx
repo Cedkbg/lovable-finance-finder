@@ -107,12 +107,14 @@ const Index = () => {
           </Link>
           <ThemeToggle />
           <div className="flex items-center gap-1.5 pl-2 border-l border-border">
-            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-              <User className="w-3.5 h-3.5 text-primary" />
-            </div>
-            <span className="text-[10px] text-muted-foreground font-mono hidden sm:block max-w-[100px] truncate">
-              {profile?.display_name || user?.email}
-            </span>
+            <Link to="/profile" className="flex items-center gap-1.5 rounded-lg hover:bg-muted p-1 transition-colors" title="Modifier le profil">
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                <User className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono hidden sm:block max-w-[100px] truncate">
+                {profile?.display_name || user?.email}
+              </span>
+            </Link>
             <button onClick={signOut} className="p-1.5 rounded-lg hover:bg-muted transition-colors" title="Déconnexion">
               <LogOut className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
