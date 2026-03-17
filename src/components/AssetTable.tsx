@@ -167,8 +167,17 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
             <TableRow>
               <TableHead className="font-mono text-[10px] px-2 py-2 whitespace-nowrap">#</TableHead>
               {COLUMNS.map((col) => (
-                <TableHead key={col.key} className="font-mono text-[10px] px-2 py-2 whitespace-nowrap">
-                  {col.label}
+                <TableHead
+                  key={col.key}
+                  className="font-mono text-[10px] px-2 py-2 whitespace-nowrap cursor-pointer select-none hover:text-primary transition-colors"
+                  onClick={() => handleSort(col.key)}
+                >
+                  <span className="flex items-center gap-1">
+                    {col.label}
+                    {sortKey === col.key && (
+                      <span className="text-primary">{sortDir === "asc" ? "↑" : "↓"}</span>
+                    )}
+                  </span>
                 </TableHead>
               ))}
             </TableRow>

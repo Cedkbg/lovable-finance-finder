@@ -153,9 +153,13 @@ const Index = () => {
             spellCheck={false}
           />
         </div>
-        <div className="flex items-center justify-between max-w-4xl mx-auto mt-2 gap-3 flex-wrap">
-          <p className="label-xs">ISIN · TICKER · SYMBOL · RIC</p>
+      <div className="flex items-center justify-between max-w-4xl mx-auto mt-2 gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[9px] font-semibold">RECHERCHE PRINCIPALE</span>
+            <p className="label-xs">ISIN · TICKER · SYMBOL · RIC</p>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-mono text-[9px] font-semibold">PAR PAYS</span>
             <CountrySearch onResults={handleCountryResults} />
             <BulkImport onSelectResult={(asset) => { setResults([asset]); setResultTitle("BULK_RESULT"); setNotFound(false); }} />
           </div>

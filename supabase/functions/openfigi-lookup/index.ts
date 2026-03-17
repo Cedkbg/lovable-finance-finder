@@ -315,7 +315,7 @@ async function handleExchangeSearch(exchCode: string, start: number) {
 
     const response = await fetch('https://api.openfigi.com/v3/search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getOpenFigiHeaders(),
       body: JSON.stringify(searchBody),
     });
 
