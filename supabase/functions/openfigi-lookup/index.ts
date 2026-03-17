@@ -132,10 +132,22 @@ async function searchWithMultipleStrategies(id: string): Promise<any> {
   return { identifier: id, found: false };
 }
 
+function getOpenFigiHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const apiKey = Deno.env.get('OPENFIGI_API_KEY');
+  if (apiKey) {
+    headers['X-OPENFIGI-APIKEY'] = apiKey;
+    console.log('Using OpenFIGI API key (200 req/min)');
+  } else {
+    console.log('No OpenFIGI API key (6 req/min limit)');
+  }
+  return headers;
+}
+
 async function callOpenFigiMapping(jobs: any[]): Promise<any> {
   const response = await fetch('https://api.openfigi.com/v3/mapping', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getOpenFigiHeaders(),
     body: JSON.stringify(jobs),
   });
 
@@ -151,7 +163,7 @@ async function callOpenFigiMapping(jobs: any[]): Promise<any> {
 async function callOpenFigiSearch(query: string): Promise<any> {
   const response = await fetch('https://api.openfigi.com/v3/search', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getOpenFigiHeaders(),
     body: JSON.stringify({ query }),
   });
 
