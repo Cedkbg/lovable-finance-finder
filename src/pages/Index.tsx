@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { searchAsset } from "@/lib/asset-service";
 import type { FinancialAsset } from "@/lib/mock-data";
-import DataGrid from "@/components/DataGrid";
+import AssetTable from "@/components/AssetTable";
 import SkeletonGrid from "@/components/SkeletonGrid";
 import BulkImport from "@/components/BulkImport";
+import CountrySearch from "@/components/CountrySearch";
 import SearchHistory from "@/components/SearchHistory";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useSearchHistory } from "@/hooks/use-search-history";
@@ -23,8 +24,8 @@ const SOURCE_ICONS: Record<string, { icon: typeof Database; label: string }> = {
 const Index = () => {
   const { user, profile, signOut } = useAuth();
   const [query, setQuery] = useState("");
-  const [result, setResult] = useState<FinancialAsset | null>(null);
-  const [source, setSource] = useState("");
+  const [results, setResults] = useState<FinancialAsset[]>([]);
+  const [resultTitle, setResultTitle] = useState("");
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [dbCount, setDbCount] = useState(0);
@@ -56,9 +57,9 @@ const Index = () => {
 
     setQuery(q);
     setLoading(true);
-    setResult(null);
+    setResults([]);
     setNotFound(false);
-    setSource("");
+    setResultTitle("");
     setShowHistory(false);
 
     const { asset, source: src } = await searchAsset(q);
@@ -66,11 +67,10 @@ const Index = () => {
     addEntry({ query: q, assetName: asset?.assetName || null, source: src });
 
     if (asset) {
-      setResult(asset);
-      setSource(src);
+      setResults([asset]);
+      setResultTitle(SOURCE_ICONS[src]?.label || "DATA_RETRIEVED_OK");
       refreshCount();
-      const srcInfo = SOURCE_ICONS[src];
-      toast(srcInfo?.label || "DATA_RETRIEVED_OK", { duration: 2000 });
+      toast(SOURCE_ICONS[src]?.label || "DATA_RETRIEVED_OK", { duration: 2000 });
     } else {
       setNotFound(true);
     }
@@ -78,11 +78,24 @@ const Index = () => {
     setLoading(false);
   }, [query, addEntry]);
 
+  const handleCountryResults = (assets: FinancialAsset[], country: string) => {
+    if (assets.length > 0) {
+      setResults(assets);
+      setResultTitle(`${assets.length} ASSETS — ${country.toUpperCase()}`);
+      setNotFound(false);
+      toast(`${assets.length} actifs trouvés pour "${country}"`, { duration: 2000 });
+    } else {
+      setResults([]);
+      setNotFound(true);
+      setQuery(country);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleSearch();
   };
 
-  const srcInfo = SOURCE_ICONS[source];
+  const hasResults = results.length > 0;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -124,7 +137,7 @@ const Index = () => {
 
       {/* Search */}
       <div className="p-4 bg-card/50 border-b border-border">
-        <div className="relative max-w-2xl mx-auto">
+        <div className="relative max-w-4xl mx-auto">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
@@ -140,16 +153,19 @@ const Index = () => {
             spellCheck={false}
           />
         </div>
-        <div className="flex items-center justify-between max-w-2xl mx-auto mt-2">
+        <div className="flex items-center justify-between max-w-4xl mx-auto mt-2 gap-3 flex-wrap">
           <p className="label-xs">ISIN · TICKER · SYMBOL · RIC</p>
-          <BulkImport onSelectResult={(asset) => { setResult(asset); setSource("database"); setNotFound(false); }} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <CountrySearch onResults={handleCountryResults} />
+            <BulkImport onSelectResult={(asset) => { setResults([asset]); setResultTitle("BULK_RESULT"); setNotFound(false); }} />
+          </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 max-w-2xl mx-auto w-full p-4 space-y-4">
+      <div className="flex-1 w-full p-4 space-y-4 overflow-x-auto">
         <AnimatePresence>
-          {showHistory && !loading && !result && (
+          {showHistory && !loading && !hasResults && (
             <SearchHistory key="history" history={history} onSelect={(q) => handleSearch(q)} onClear={clearHistory} />
           )}
         </AnimatePresence>
@@ -157,15 +173,9 @@ const Index = () => {
         <AnimatePresence mode="wait">
           {loading && <SkeletonGrid key="skeleton" />}
 
-          {result && !loading && (
+          {hasResults && !loading && (
             <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              {srcInfo && (
-                <div className="flex items-center gap-2 px-4 py-2 mb-3 rounded-lg bg-primary/5 border border-primary/10">
-                  <srcInfo.icon className="w-3.5 h-3.5 text-primary" />
-                  <span className="font-mono text-[10px] text-primary font-medium">{srcInfo.label}</span>
-                </div>
-              )}
-              <DataGrid data={result} />
+              <AssetTable assets={results} title={resultTitle} />
             </motion.div>
           )}
 
@@ -181,14 +191,14 @@ const Index = () => {
             </motion.div>
           )}
 
-          {!result && !loading && !notFound && !showHistory && (
+          {!hasResults && !loading && !notFound && !showHistory && (
             <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-16">
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
                 <Search className="w-7 h-7 text-primary" />
               </div>
               <p className="font-semibold text-foreground text-sm">Prêt à enrichir</p>
               <p className="text-muted-foreground text-xs mt-1 text-center max-w-sm">
-                Entrez un ISIN ou ticker pour obtenir toutes les données financières
+                Entrez un ISIN, ticker ou pays pour obtenir toutes les données financières
               </p>
 
               <div className="mt-5 flex flex-wrap gap-1.5 justify-center items-center">
@@ -214,7 +224,7 @@ const Index = () => {
               </div>
 
               {history.length > 0 && (
-                <div className="mt-8 w-full">
+                <div className="mt-8 w-full max-w-2xl">
                   <SearchHistory history={history.slice(0, 5)} onSelect={(q) => handleSearch(q)} onClear={clearHistory} />
                 </div>
               )}
