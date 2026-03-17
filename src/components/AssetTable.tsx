@@ -95,11 +95,18 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
     return Array.from(s).sort();
   }, [assets]);
 
-  // Filtered assets
+  // Filtered & sorted assets
   const filtered = useMemo(() => {
-    if (!sectorFilter) return assets;
-    return assets.filter((a) => a.sector === sectorFilter);
-  }, [assets, sectorFilter]);
+    let result = sectorFilter ? assets.filter((a) => a.sector === sectorFilter) : [...assets];
+    if (sortKey) {
+      result.sort((a, b) => {
+        const va = String(a[sortKey] || "").toLowerCase();
+        const vb = String(b[sortKey] || "").toLowerCase();
+        return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+    }
+    return result;
+  }, [assets, sectorFilter, sortKey, sortDir]);
 
   // Pagination
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
