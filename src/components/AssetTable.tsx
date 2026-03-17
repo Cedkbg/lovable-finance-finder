@@ -76,6 +76,18 @@ export function exportToExcel(assets: FinancialAsset[], filename = "enriched_ass
 const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
   const [page, setPage] = useState(0);
   const [sectorFilter, setSectorFilter] = useState("");
+  const [sortKey, setSortKey] = useState<keyof FinancialAsset | "">("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (key: keyof FinancialAsset) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setPage(0);
+  };
 
   // Extract unique sectors
   const sectors = useMemo(() => {
@@ -83,11 +95,18 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
     return Array.from(s).sort();
   }, [assets]);
 
-  // Filtered assets
+  // Filtered & sorted assets
   const filtered = useMemo(() => {
-    if (!sectorFilter) return assets;
-    return assets.filter((a) => a.sector === sectorFilter);
-  }, [assets, sectorFilter]);
+    let result = sectorFilter ? assets.filter((a) => a.sector === sectorFilter) : [...assets];
+    if (sortKey) {
+      result.sort((a, b) => {
+        const va = String(a[sortKey] || "").toLowerCase();
+        const vb = String(b[sortKey] || "").toLowerCase();
+        return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+    }
+    return result;
+  }, [assets, sectorFilter, sortKey, sortDir]);
 
   // Pagination
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -148,8 +167,17 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
             <TableRow>
               <TableHead className="font-mono text-[10px] px-2 py-2 whitespace-nowrap">#</TableHead>
               {COLUMNS.map((col) => (
-                <TableHead key={col.key} className="font-mono text-[10px] px-2 py-2 whitespace-nowrap">
-                  {col.label}
+                <TableHead
+                  key={col.key}
+                  className="font-mono text-[10px] px-2 py-2 whitespace-nowrap cursor-pointer select-none hover:text-primary transition-colors"
+                  onClick={() => handleSort(col.key)}
+                >
+                  <span className="flex items-center gap-1">
+                    {col.label}
+                    {sortKey === col.key && (
+                      <span className="text-primary">{sortDir === "asc" ? "↑" : "↓"}</span>
+                    )}
+                  </span>
                 </TableHead>
               ))}
             </TableRow>
