@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Globe, Loader2 } from "lucide-react";
+import { Globe, Loader2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { dbToFinancialAsset, type DbAsset } from "@/lib/asset-service";
+import { getCountryCodes } from "@/lib/country-codes";
 import type { FinancialAsset } from "@/lib/mock-data";
 
 interface CountrySearchProps {
@@ -17,10 +18,28 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
     if (!q) return;
 
     setLoading(true);
+
+    // Get all possible country codes for the search term
+    const codes = getCountryCodes(q);
+    
+    // Build OR filters: match country, country_id, description, or any mapped codes
+    const filters: string[] = [
+      `country.ilike.%${q}%`,
+      `country_id.ilike.%${q}%`,
+      `description.ilike.%${q}%`,
+    ];
+    
+    // Add each mapped code as exact or partial match
+    for (const code of codes) {
+      filters.push(`country.eq.${code}`);
+      filters.push(`country_id.eq.${code}`);
+      filters.push(`mic_code.eq.${code}`);
+    }
+
     const { data, error } = await supabase
       .from("financial_assets")
       .select("*")
-      .or(`country.ilike.%${q}%,country_id.ilike.%${q}%`)
+      .or(filters.join(","))
       .order("asset_name");
 
     if (!error && data) {
@@ -38,7 +57,7 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
           value={country}
           onChange={(e) => setCountry(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          placeholder="Pays (ex: France, US, CH...)"
+          placeholder="Pays (ex: France, US, Mauritius...)"
           className="w-full h-9 pl-9 pr-3 bg-background border border-input rounded-lg font-mono text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
         />
       </div>
