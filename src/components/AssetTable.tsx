@@ -76,6 +76,18 @@ export function exportToExcel(assets: FinancialAsset[], filename = "enriched_ass
 const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
   const [page, setPage] = useState(0);
   const [sectorFilter, setSectorFilter] = useState("");
+  const [sortKey, setSortKey] = useState<keyof FinancialAsset | "">("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (key: keyof FinancialAsset) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setPage(0);
+  };
 
   // Extract unique sectors
   const sectors = useMemo(() => {
