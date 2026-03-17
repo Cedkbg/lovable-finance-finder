@@ -14,7 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      financial_assets: {
+        Row: {
+          acf: string | null
+          asset_name: string
+          country: string | null
+          country_id: string | null
+          created_at: string
+          currency: string | null
+          currency_id: string | null
+          description: string | null
+          id: string
+          isin: string
+          mic_code: string | null
+          ric: string | null
+          sector: string | null
+          source: string | null
+          symbol: string | null
+          ticker: string | null
+          updated_at: string
+        }
+        Insert: {
+          acf?: string | null
+          asset_name: string
+          country?: string | null
+          country_id?: string | null
+          created_at?: string
+          currency?: string | null
+          currency_id?: string | null
+          description?: string | null
+          id?: string
+          isin: string
+          mic_code?: string | null
+          ric?: string | null
+          sector?: string | null
+          source?: string | null
+          symbol?: string | null
+          ticker?: string | null
+          updated_at?: string
+        }
+        Update: {
+          acf?: string | null
+          asset_name?: string
+          country?: string | null
+          country_id?: string | null
+          created_at?: string
+          currency?: string | null
+          currency_id?: string | null
+          description?: string | null
+          id?: string
+          isin?: string
+          mic_code?: string | null
+          ric?: string | null
+          sector?: string | null
+          source?: string | null
+          symbol?: string | null
+          ticker?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
