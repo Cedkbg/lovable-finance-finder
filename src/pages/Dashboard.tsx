@@ -79,7 +79,12 @@ const Dashboard = () => {
           </Link>
           <span className="font-mono text-xs font-semibold text-foreground">DASHBOARD</span>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <Link to="/profile" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Profil">
+            <UserCircle2 className="w-4 h-4 text-muted-foreground" />
+          </Link>
+          <ThemeToggle />
+        </div>
       </header>
 
       <div className="max-w-4xl mx-auto p-4 space-y-6">
