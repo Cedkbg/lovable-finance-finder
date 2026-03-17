@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { searchAsset, seedDatabase } from "@/lib/asset-service";
+import { searchAsset } from "@/lib/asset-service";
 import type { FinancialAsset } from "@/lib/mock-data";
 import DataGrid from "@/components/DataGrid";
 import SkeletonGrid from "@/components/SkeletonGrid";
