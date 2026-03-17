@@ -32,7 +32,7 @@ const Index = () => {
   const { history, addEntry, clearHistory } = useSearchHistory();
 
   useEffect(() => {
-    seedDatabase().then(() => refreshCount());
+    refreshCount();
   }, []);
 
   const refreshCount = () => {
