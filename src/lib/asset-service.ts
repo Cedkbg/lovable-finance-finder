@@ -40,6 +40,7 @@ export function dbToFinancialAsset(db: DbAsset): FinancialAsset {
     currencyId: db.currency_id || "",
     currency: db.currency || "",
     description: db.description || "",
+    source: db.source || "",
   };
 }
 

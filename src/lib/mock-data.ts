@@ -15,6 +15,7 @@ export interface FinancialAsset {
   currencyId: string;
   currency: string;
   description: string;
+  source?: string;
 }
 
 export const MOCK_DATA: FinancialAsset[] = [
