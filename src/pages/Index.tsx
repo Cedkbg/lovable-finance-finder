@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
-import { Search, Database, Wifi, HardDrive, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { searchAsset, seedDatabase } from "@/lib/asset-service";
+import { searchAsset } from "@/lib/asset-service";
 import type { FinancialAsset } from "@/lib/mock-data";
 import DataGrid from "@/components/DataGrid";
 import SkeletonGrid from "@/components/SkeletonGrid";
@@ -10,6 +11,7 @@ import BulkImport from "@/components/BulkImport";
 import SearchHistory from "@/components/SearchHistory";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useSearchHistory } from "@/hooks/use-search-history";
+import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 
 const SOURCE_ICONS: Record<string, { icon: typeof Database; label: string }> = {
@@ -19,6 +21,7 @@ const SOURCE_ICONS: Record<string, { icon: typeof Database; label: string }> = {
 };
 
 const Index = () => {
+  const { user, profile, signOut } = useAuth();
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<FinancialAsset | null>(null);
   const [source, setSource] = useState("");
@@ -28,9 +31,8 @@ const Index = () => {
   const [showHistory, setShowHistory] = useState(false);
   const { history, addEntry, clearHistory } = useSearchHistory();
 
-  // Seed DB and get count on mount
   useEffect(() => {
-    seedDatabase().then(() => refreshCount());
+    refreshCount();
   }, []);
 
   const refreshCount = () => {
@@ -40,20 +42,12 @@ const Index = () => {
       .then(({ count }) => setDbCount(count || 0));
   };
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel("financial_assets_realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "financial_assets" },
-        () => refreshCount()
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "financial_assets" }, () => refreshCount())
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const handleSearch = useCallback(async (searchQuery?: string) => {
@@ -69,11 +63,7 @@ const Index = () => {
 
     const { asset, source: src } = await searchAsset(q);
 
-    addEntry({
-      query: q,
-      assetName: asset?.assetName || null,
-      source: src,
-    });
+    addEntry({ query: q, assetName: asset?.assetName || null, source: src });
 
     if (asset) {
       setResult(asset);
@@ -103,20 +93,30 @@ const Index = () => {
             <Zap className="w-4 h-4 text-primary" />
           </div>
           <div>
-            <span className="font-mono text-xs font-semibold text-foreground tracking-wide">
-              ENRICHER
-            </span>
+            <span className="font-mono text-xs font-semibold text-foreground tracking-wide">ENRICHER</span>
             <span className="font-mono text-[10px] text-muted-foreground ml-1.5">v2.0</span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted">
             <Database className="w-3 h-3 text-primary" />
-            <span className="font-mono text-[10px] text-muted-foreground">
-              {dbCount} assets
-            </span>
+            <span className="font-mono text-[10px] text-muted-foreground">{dbCount}</span>
           </div>
+          <Link to="/dashboard" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Dashboard">
+            <BarChart3 className="w-4 h-4 text-muted-foreground" />
+          </Link>
           <ThemeToggle />
+          <div className="flex items-center gap-1.5 pl-2 border-l border-border">
+            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+              <User className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <span className="text-[10px] text-muted-foreground font-mono hidden sm:block max-w-[100px] truncate">
+              {profile?.display_name || user?.email}
+            </span>
+            <button onClick={signOut} className="p-1.5 rounded-lg hover:bg-muted transition-colors" title="Déconnexion">
+              <LogOut className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -146,15 +146,9 @@ const Index = () => {
 
       {/* Content */}
       <div className="flex-1 max-w-2xl mx-auto w-full p-4 space-y-4">
-        {/* Search History dropdown */}
         <AnimatePresence>
           {showHistory && !loading && !result && (
-            <SearchHistory
-              key="history"
-              history={history}
-              onSelect={(q) => handleSearch(q)}
-              onClear={clearHistory}
-            />
+            <SearchHistory key="history" history={history} onSelect={(q) => handleSearch(q)} onClear={clearHistory} />
           )}
         </AnimatePresence>
 
@@ -174,13 +168,7 @@ const Index = () => {
           )}
 
           {notFound && !loading && (
-            <motion.div
-              key="notfound"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center py-20"
-            >
+            <motion.div key="notfound" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-20">
               <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
                 <Search className="w-5 h-5 text-destructive" />
               </div>
@@ -192,13 +180,7 @@ const Index = () => {
           )}
 
           {!result && !loading && !notFound && !showHistory && (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center py-16"
-            >
+            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-16">
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
                 <Search className="w-7 h-7 text-primary" />
               </div>
@@ -229,14 +211,9 @@ const Index = () => {
                 ))}
               </div>
 
-              {/* Show recent history below */}
               {history.length > 0 && (
                 <div className="mt-8 w-full">
-                  <SearchHistory
-                    history={history.slice(0, 5)}
-                    onSelect={(q) => handleSearch(q)}
-                    onClear={clearHistory}
-                  />
+                  <SearchHistory history={history.slice(0, 5)} onSelect={(q) => handleSearch(q)} onClear={clearHistory} />
                 </div>
               )}
             </motion.div>

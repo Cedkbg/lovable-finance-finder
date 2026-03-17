@@ -33,6 +33,7 @@ export type Database = {
           symbol: string | null
           ticker: string | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           acf?: string | null
@@ -52,6 +53,7 @@ export type Database = {
           symbol?: string | null
           ticker?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           acf?: string | null
@@ -71,6 +73,40 @@ export type Database = {
           symbol?: string | null
           ticker?: string | null
           updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          company: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          preferred_theme: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          company?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          preferred_theme?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          company?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          preferred_theme?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

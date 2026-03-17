@@ -17,6 +17,7 @@ export interface DbAsset {
   currency: string | null;
   description: string | null;
   source: string | null;
+  user_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +41,11 @@ export function dbToFinancialAsset(db: DbAsset): FinancialAsset {
     currency: db.currency || "",
     description: db.description || "",
   };
+}
+
+async function getCurrentUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id || null;
 }
 
 // CAS 1: Search in database
@@ -81,18 +87,24 @@ async function searchViaOpenFigi(query: string): Promise<FinancialAsset | null> 
     if (error || !data?.results?.[0]?.found) return null;
 
     const asset = data.results[0].asset;
+    const userId = await getCurrentUserId();
 
     // Save to DB for future lookups
     const { data: inserted, error: insertErr } = await supabase
       .from("financial_assets")
-      .upsert(asset, { onConflict: "isin" })
+      .upsert({ ...asset, user_id: userId }, { onConflict: "isin" })
       .select()
       .single();
 
     if (insertErr) {
       console.warn("Failed to persist OpenFIGI result:", insertErr);
-      // Return the asset anyway
-      return dbToFinancialAsset({ ...asset, id: crypto.randomUUID(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as DbAsset);
+      return dbToFinancialAsset({
+        ...asset,
+        id: crypto.randomUUID(),
+        user_id: userId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as DbAsset);
     }
 
     return dbToFinancialAsset(inserted as DbAsset);
@@ -102,8 +114,11 @@ async function searchViaOpenFigi(query: string): Promise<FinancialAsset | null> 
   }
 }
 
-// Save a mock asset to DB (for seeding)
-async function saveToDb(asset: FinancialAsset): Promise<void> {
+// Save a found mock asset to user's collection
+async function saveToUserDb(asset: FinancialAsset): Promise<void> {
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+  
   await supabase.from("financial_assets").upsert(
     {
       asset_name: asset.assetName,
@@ -119,9 +134,10 @@ async function saveToDb(asset: FinancialAsset): Promise<void> {
       currency_id: asset.currencyId,
       currency: asset.currency,
       description: asset.description,
-      source: "seed",
+      source: "local_dataset",
+      user_id: userId,
     },
-    { onConflict: "isin" }
+    { onConflict: "isin", ignoreDuplicates: true }
   );
 }
 
@@ -134,8 +150,8 @@ export async function searchAsset(query: string): Promise<{ asset: FinancialAsse
   // 2. Mock data fallback
   const mockResult = searchInMockData(query);
   if (mockResult) {
-    // Persist to DB
-    await saveToDb(mockResult);
+    // Try to persist (may fail if ISIN conflict with public data - that's OK)
+    await saveToUserDb(mockResult);
     return { asset: mockResult, source: "local_dataset" };
   }
 
@@ -163,11 +179,4 @@ export async function bulkEnrich(
   }
 
   return { results };
-}
-
-// Seed database with mock data
-export async function seedDatabase(): Promise<void> {
-  for (const asset of MOCK_DATA) {
-    await saveToDb(asset);
-  }
 }
