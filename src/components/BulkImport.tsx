@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
-import { Upload, FileSpreadsheet, X, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Loader2, CheckCircle2, XCircle, Download } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { bulkEnrich } from "@/lib/asset-service";
 import type { FinancialAsset } from "@/lib/mock-data";
+import { exportToExcel } from "@/components/AssetTable";
 
 interface BulkResult {
   identifier: string;
