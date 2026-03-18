@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User } from "lucide-react";
+import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User, FileSpreadsheet } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { searchAsset } from "@/lib/asset-service";
@@ -115,6 +115,9 @@ const Index = () => {
             <Database className="w-3 h-3 text-primary" />
             <span className="font-mono text-[10px] text-muted-foreground">{dbCount}</span>
           </div>
+          <Link to="/data" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Data Manager">
+            <FileSpreadsheet className="w-4 h-4 text-muted-foreground" />
+          </Link>
           <Link to="/dashboard" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Dashboard">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
           </Link>

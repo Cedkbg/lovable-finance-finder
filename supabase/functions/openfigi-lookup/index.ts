@@ -18,17 +18,21 @@ serve(async (req) => {
       return await handleExchangeSearch(body.exchCode, body.start || 0);
     }
 
-    // Mode 2: Standard identifier mapping (multi-strategy)
+    // Mode 2: Search ALL exchanges for a country (multi-exchange)
+    if (body.exchCodes && Array.isArray(body.exchCodes)) {
+      return await handleMultiExchangeSearch(body.exchCodes);
+    }
+
+    // Mode 3: Standard identifier mapping (multi-strategy)
     const { identifiers } = body;
     if (!identifiers || !Array.isArray(identifiers) || identifiers.length === 0) {
-      return new Response(JSON.stringify({ error: 'identifiers array or exchCode required' }), {
+      return new Response(JSON.stringify({ error: 'identifiers array, exchCode, or exchCodes required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const results = [];
-
     for (const identifier of identifiers) {
       const id = identifier.trim().toUpperCase();
       const result = await searchWithMultipleStrategies(id);
@@ -50,27 +54,14 @@ serve(async (req) => {
 // Detect identifier type
 function detectIdType(id: string): string[] {
   const strategies: string[] = [];
-  
-  // ISIN: 2 letters + 9 alphanumeric + 1 check digit
-  if (/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(id)) {
-    strategies.push('ID_ISIN');
-  }
-  // CUSIP: 9 alphanumeric characters
-  if (/^[A-Z0-9]{9}$/.test(id) && !/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(id)) {
-    strategies.push('ID_CUSIP');
-  }
-  // SEDOL: 7 alphanumeric characters
-  if (/^[A-Z0-9]{7}$/.test(id)) {
-    strategies.push('ID_SEDOL');
-  }
-  // FIGI: BBG + 9 alphanumeric
+  if (/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(id)) strategies.push('ID_ISIN');
+  if (/^[A-Z0-9]{9}$/.test(id) && !/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(id)) strategies.push('ID_CUSIP');
+  if (/^[A-Z0-9]{7}$/.test(id)) strategies.push('ID_SEDOL');
   if (/^BBG[A-Z0-9]{9}$/.test(id)) {
     strategies.push('ID_BB_GLOBAL');
     strategies.push('COMPOSITE_ID_BB_GLOBAL');
   }
-  // Default: try as ticker
   strategies.push('TICKER');
-  
   return strategies;
 }
 
@@ -81,12 +72,9 @@ async function searchWithMultipleStrategies(id: string): Promise<any> {
     try {
       const mappingJob = [{ idType, idValue: id }];
       
-      // For tickers, also try with common exchange codes to get more results
       if (idType === 'TICKER') {
-        // First try without exchange filter (gets composite/global result)
         const result = await callOpenFigiMapping(mappingJob);
         if (result && result[0]?.data?.length > 0) {
-          // Pick the best result from all matches
           const bestMatch = pickBestResult(result[0].data, id);
           return {
             identifier: id,
@@ -112,7 +100,6 @@ async function searchWithMultipleStrategies(id: string): Promise<any> {
     }
   }
 
-  // Last resort: try the /v3/search endpoint for fuzzy matching
   try {
     const searchResult = await callOpenFigiSearch(id);
     if (searchResult?.data?.length > 0) {
@@ -137,11 +124,12 @@ function getOpenFigiHeaders(): Record<string, string> {
   const apiKey = Deno.env.get('OPENFIGI_API_KEY');
   if (apiKey) {
     headers['X-OPENFIGI-APIKEY'] = apiKey;
-    console.log('Using OpenFIGI API key (200 req/min)');
-  } else {
-    console.log('No OpenFIGI API key (6 req/min limit)');
   }
   return headers;
+}
+
+function hasApiKey(): boolean {
+  return !!Deno.env.get('OPENFIGI_API_KEY');
 }
 
 async function callOpenFigiMapping(jobs: any[]): Promise<any> {
@@ -160,11 +148,15 @@ async function callOpenFigiMapping(jobs: any[]): Promise<any> {
   return await response.json();
 }
 
-async function callOpenFigiSearch(query: string): Promise<any> {
+async function callOpenFigiSearch(query: string, exchCode?: string, start?: number): Promise<any> {
+  const searchBody: any = { query };
+  if (exchCode) searchBody.exchCode = exchCode;
+  if (start !== undefined) searchBody.start = String(start);
+
   const response = await fetch('https://api.openfigi.com/v3/search', {
     method: 'POST',
     headers: getOpenFigiHeaders(),
-    body: JSON.stringify({ query }),
+    body: JSON.stringify(searchBody),
   });
 
   if (!response.ok) {
@@ -176,39 +168,25 @@ async function callOpenFigiSearch(query: string): Promise<any> {
   return await response.json();
 }
 
-// Pick the best result from multiple OpenFIGI matches
 function pickBestResult(data: any[], identifier: string): any {
-  // Prioritize: Common Stock > ETF > other types
-  // Also prefer results with more complete data
   const scored = data.map(item => {
     let score = 0;
-    
-    // Prefer equity/common stock
     if (item.securityType === 'Common Stock' || item.marketSector === 'Equity') score += 10;
     if (item.securityType === 'ETP' || item.securityType === 'ETF') score += 5;
-    
-    // Prefer items with complete data
     if (item.name) score += 3;
     if (item.ticker) score += 2;
     if (item.exchCode) score += 1;
     if (item.securityCurrency) score += 1;
     if (item.micCode) score += 1;
-    
-    // Prefer major exchanges
     const majorExchanges = ['UN', 'UW', 'UQ', 'US', 'LN', 'FP', 'PA', 'GR', 'JT', 'HK'];
     if (majorExchanges.includes(item.exchCode)) score += 5;
-    
-    // Exact ticker match gets a bonus
     if (item.ticker?.toUpperCase() === identifier.toUpperCase()) score += 8;
-
     return { item, score };
   });
-  
   scored.sort((a, b) => b.score - a.score);
   return scored[0].item;
 }
 
-// Map exchange codes to country names
 const EXCHANGE_TO_COUNTRY: Record<string, string> = {
   'UN': 'United States', 'UW': 'United States', 'UQ': 'United States', 'US': 'United States', 'UA': 'United States',
   'LN': 'United Kingdom', 'GB': 'United Kingdom',
@@ -234,7 +212,6 @@ const EXCHANGE_TO_COUNTRY: Record<string, string> = {
   'MM': 'Mexico', 'MX': 'Mexico',
 };
 
-// Map exchange codes to ISO country codes
 const EXCHANGE_TO_ISO: Record<string, string> = {
   'UN': 'US', 'UW': 'US', 'UQ': 'US', 'US': 'US', 'UA': 'US',
   'LN': 'GB', 'GB': 'GB',
@@ -263,18 +240,11 @@ const EXCHANGE_TO_ISO: Record<string, string> = {
 function figiToAsset(figi: any, identifier: string, isIsin: boolean) {
   const exchCode = figi.exchCode || '';
   const ticker = figi.ticker || '';
-  
-  // Build proper RIC: TICKER.EXCHANGE_CODE
   const ric = ticker && exchCode ? `${ticker}.${exchCode}` : (ticker || '');
-  
-  // Proper country resolution
   const country = EXCHANGE_TO_COUNTRY[exchCode] || exchCode;
   const countryId = EXCHANGE_TO_ISO[exchCode] || exchCode;
-  
-  // For ISIN searches, use the identifier as ISIN. Otherwise leave empty (we don't have it)
   const isin = isIsin ? identifier : '';
-  
-  // Build a meaningful description
+
   const parts = [figi.name || 'Unknown'];
   if (figi.securityType) parts.push(figi.securityType);
   if (figi.marketSector) parts.push(figi.marketSector);
@@ -299,49 +269,33 @@ function figiToAsset(figi: any, identifier: string, isIsin: boolean) {
   };
 }
 
+// Handle single exchange search with deep pagination
 async function handleExchangeSearch(exchCode: string, start: number) {
   const allAssets: any[] = [];
+  const seenFigis = new Set<string>();
+  const MAX_PAGES = hasApiKey() ? 50 : 10;
   let currentStart = start;
-  const MAX_PAGES = 10;
+  const delay = hasApiKey() ? 100 : 300;
   
   for (let page = 0; page < MAX_PAGES; page++) {
-    const searchBody = {
-      query: exchCode,
-      exchCode: exchCode,
-      start: String(currentStart),
-    };
+    console.log(`Searching exchange ${exchCode}, start=${currentStart}, page=${page + 1}/${MAX_PAGES}`);
 
-    console.log(`Searching OpenFIGI exchange ${exchCode}, start=${currentStart}`);
-
-    const response = await fetch('https://api.openfigi.com/v3/search', {
-      method: 'POST',
-      headers: getOpenFigiHeaders(),
-      body: JSON.stringify(searchBody),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('OpenFIGI search error:', response.status, errText);
-      break;
-    }
-
-    const data = await response.json();
-    const items = data.data || [];
+    const data = await callOpenFigiSearch('', exchCode, currentStart);
+    const items = data?.data || [];
     
     if (items.length === 0) break;
 
-    const seen = new Set(allAssets.map(a => a.ticker));
     for (const figi of items) {
-      const ticker = figi.ticker || '';
-      if (ticker && !seen.has(ticker)) {
-        seen.add(ticker);
+      const key = figi.figi || figi.compositeFIGI || `${figi.ticker}-${figi.exchCode}-${figi.name}`;
+      if (!seenFigis.has(key)) {
+        seenFigis.add(key);
         allAssets.push(figiToAsset(figi, '', false));
       }
     }
 
     currentStart += items.length;
     if (items.length < 100) break;
-    await new Promise(r => setTimeout(r, 250));
+    await new Promise(r => setTimeout(r, delay));
   }
 
   return new Response(JSON.stringify({
@@ -349,6 +303,47 @@ async function handleExchangeSearch(exchCode: string, start: number) {
     total: allAssets.length,
     nextStart: currentStart,
     hasMore: allAssets.length >= MAX_PAGES * 100,
+  }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// Handle multi-exchange search (all exchanges for a country)
+async function handleMultiExchangeSearch(exchCodes: string[]) {
+  const allAssets: any[] = [];
+  const seenFigis = new Set<string>();
+  const delay = hasApiKey() ? 100 : 350;
+  const maxPagesPerExchange = hasApiKey() ? 30 : 5;
+
+  for (const exchCode of exchCodes) {
+    let currentStart = 0;
+    
+    for (let page = 0; page < maxPagesPerExchange; page++) {
+      console.log(`Multi-search: exchange ${exchCode}, start=${currentStart}`);
+
+      const data = await callOpenFigiSearch('', exchCode, currentStart);
+      const items = data?.data || [];
+      
+      if (items.length === 0) break;
+
+      for (const figi of items) {
+        const key = figi.figi || figi.compositeFIGI || `${figi.ticker}-${figi.exchCode}-${figi.name}`;
+        if (!seenFigis.has(key)) {
+          seenFigis.add(key);
+          allAssets.push(figiToAsset(figi, '', false));
+        }
+      }
+
+      currentStart += items.length;
+      if (items.length < 100) break;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+
+  return new Response(JSON.stringify({
+    assets: allAssets,
+    total: allAssets.length,
+    hasMore: false,
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });

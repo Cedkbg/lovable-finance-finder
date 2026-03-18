@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Globe, Loader2, Download, RefreshCw } from "lucide-react";
+import { Globe, Loader2, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { dbToFinancialAsset, type DbAsset } from "@/lib/asset-service";
 import { getCountryCodes } from "@/lib/country-codes";
-import { exportToExcel } from "@/components/AssetTable";
 import type { FinancialAsset } from "@/lib/mock-data";
 import { toast } from "sonner";
 
@@ -17,7 +16,6 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState("");
 
-  // Search local DB for country assets
   const handleSearch = async () => {
     const q = country.trim();
     if (!q) return;
@@ -47,7 +45,7 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
     setLoading(false);
   };
 
-  // Import from OpenFIGI by exchange code
+  // Import ALL exchanges for a country via multi-exchange endpoint
   const handleBatchImport = async () => {
     const q = country.trim();
     if (!q) return;
@@ -59,79 +57,75 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
     }
 
     setImporting(true);
-    let totalImported = 0;
-    const allAssets: FinancialAsset[] = [];
+    setImportProgress(`Recherche OpenFIGI: ${codes.join(", ")}...`);
 
-    // Get current user
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
 
-    for (const exchCode of codes) {
-      setImportProgress(`Recherche OpenFIGI: ${exchCode}...`);
+    try {
+      // Use multi-exchange endpoint to query ALL exchanges at once
+      const { data, error } = await supabase.functions.invoke("openfigi-lookup", {
+        body: { exchCodes: codes },
+      });
 
-      try {
-        const { data, error } = await supabase.functions.invoke("openfigi-lookup", {
-          body: { exchCode, start: 0 },
-        });
-
-        if (error || !data?.assets) {
-          console.warn(`No results for exchange ${exchCode}:`, error);
-          continue;
-        }
-
-        const assets = data.assets;
-        setImportProgress(`${exchCode}: ${assets.length} actifs trouvés, sauvegarde...`);
-
-        // Batch upsert in chunks of 50
-        for (let i = 0; i < assets.length; i += 50) {
-          const chunk = assets.slice(i, i + 50).map((a: any) => ({
-            ...a,
-            user_id: userId,
-          }));
-
-          const { error: upsertErr } = await supabase
-            .from("financial_assets")
-            .upsert(chunk, { onConflict: "isin", ignoreDuplicates: true });
-
-          if (upsertErr) {
-            console.warn("Upsert error:", upsertErr);
-          }
-
-          totalImported += chunk.length;
-          setImportProgress(`${exchCode}: ${Math.min(i + 50, assets.length)}/${assets.length} sauvegardés`);
-        }
-
-        // Load back from DB for proper display
-        if (data.hasMore) {
-          toast.info(`${exchCode}: il y a plus de résultats. Relancez pour la suite.`);
-        }
-      } catch (err) {
-        console.error(`Error importing ${exchCode}:`, err);
+      if (error || !data?.assets) {
+        console.warn("No results for exchanges:", codes, error);
+        toast.error(`Aucun actif trouvé pour "${q}" sur OpenFIGI`);
+        setImporting(false);
+        setImportProgress("");
+        return;
       }
-    }
 
-    setImportProgress("Chargement des résultats...");
+      const assets = data.assets;
+      setImportProgress(`${assets.length} actifs trouvés, sauvegarde en cours...`);
 
-    // Now reload from DB
-    const filters: string[] = [];
-    for (const code of codes) {
-      filters.push(`country.eq.${code}`);
-      filters.push(`country_id.eq.${code}`);
-      filters.push(`mic_code.eq.${code}`);
-    }
+      // Batch upsert in chunks of 50
+      let saved = 0;
+      for (let i = 0; i < assets.length; i += 50) {
+        const chunk = assets.slice(i, i + 50).map((a: any) => ({
+          ...a,
+          isin: a.isin || `NOISN-${a.ticker || a.asset_name}-${a.country_id || "XX"}-${i + Math.random().toString(36).slice(2, 6)}`,
+          user_id: userId,
+        }));
 
-    const { data: dbData } = await supabase
-      .from("financial_assets")
-      .select("*")
-      .or(filters.join(","))
-      .order("asset_name");
+        const { error: upsertErr } = await supabase
+          .from("financial_assets")
+          .upsert(chunk, { onConflict: "isin", ignoreDuplicates: true });
 
-    if (dbData && dbData.length > 0) {
-      const mapped = dbData.map((d) => dbToFinancialAsset(d as DbAsset));
-      onResults(mapped, q);
-      toast.success(`${mapped.length} actifs importés pour "${q}"`);
-    } else {
-      toast.error(`Aucun actif trouvé pour "${q}" sur OpenFIGI`);
+        if (upsertErr) console.warn("Upsert error:", upsertErr);
+        saved += chunk.length;
+        setImportProgress(`${saved}/${assets.length} sauvegardés...`);
+      }
+
+      // Reload from DB
+      setImportProgress("Chargement des résultats...");
+      const filters: string[] = [];
+      for (const code of codes) {
+        filters.push(`country.eq.${code}`);
+        filters.push(`country_id.eq.${code}`);
+        filters.push(`mic_code.eq.${code}`);
+      }
+
+      const { data: dbData } = await supabase
+        .from("financial_assets")
+        .select("*")
+        .or(filters.join(","))
+        .order("asset_name");
+
+      if (dbData && dbData.length > 0) {
+        const mapped = dbData.map((d) => dbToFinancialAsset(d as DbAsset));
+        onResults(mapped, q);
+        toast.success(`${mapped.length} actifs importés pour "${q}" (${codes.length} bourses)`);
+      } else {
+        toast.error(`Aucun actif trouvé pour "${q}"`);
+      }
+
+      if (data.hasMore) {
+        toast.info("Il y a plus de résultats disponibles. Ajoutez une clé API OpenFIGI pour tout récupérer.");
+      }
+    } catch (err) {
+      console.error("Import error:", err);
+      toast.error("Erreur lors de l'import");
     }
 
     setImporting(false);
@@ -163,10 +157,10 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
         onClick={handleBatchImport}
         disabled={importing || loading || !country.trim()}
         className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-primary text-primary-foreground font-mono text-xs hover:bg-primary/90 transition-colors disabled:opacity-50"
-        title="Importer toutes les entreprises du pays depuis OpenFIGI"
+        title="Importer TOUTES les entreprises du pays depuis OpenFIGI (toutes les bourses)"
       >
         {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-        IMPORT
+        IMPORT ALL
       </button>
       {importing && importProgress && (
         <span className="font-mono text-[10px] text-muted-foreground whitespace-nowrap">
