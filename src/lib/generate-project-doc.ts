@@ -9,7 +9,7 @@ export function generateProjectDocument() {
     [""],
     ["Rubrique", "Détail"],
     ["Nom du projet", "Data Enricher Financier"],
-    ["Version", "v4.2 (ENRICHER_v4.2)"],
+    ["Version", "v4.3 (ENRICHER_v4.3)"],
     ["Date de création", "Mars 2026"],
     ["Type", "Application web SaaS (Single Page Application)"],
     ["Objectif principal", "Transformer un identifiant financier (ISIN, Ticker, CUSIP, SEDOL, FIGI) en un ensemble complet de données enrichies (RIC, MIC, secteur, devise, pays, etc.)"],
