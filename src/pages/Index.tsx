@@ -4,7 +4,6 @@ import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User, FileSp
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { searchAsset } from "@/lib/asset-service";
-import { generateProjectDocument } from "@/lib/generate-project-doc";
 import type { FinancialAsset } from "@/lib/mock-data";
 import AssetTable from "@/components/AssetTable";
 import SkeletonGrid from "@/components/SkeletonGrid";
