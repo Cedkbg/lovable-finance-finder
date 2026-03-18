@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import { generateProjectDocument } from "@/lib/generate-project-doc";
 import {
   ArrowLeft,
   Download,
