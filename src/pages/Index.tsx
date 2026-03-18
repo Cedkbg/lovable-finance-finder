@@ -14,6 +14,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { useSearchHistory } from "@/hooks/use-search-history";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { generateProjectDocument } from "@/lib/generate-project-doc";
 
 const SOURCE_ICONS: Record<string, { icon: typeof Database; label: string }> = {
   database: { icon: Database, label: "FROM_DATABASE" },
