@@ -150,8 +150,9 @@ const DataManager = () => {
 
   // Filters
   const sectors = useMemo(() => {
-    const s = new Set(assets.map((a) => a.sector).filter(Boolean));
-    return Array.from(s).sort();
+    const fromData = new Set(assets.map((a) => a.sector).filter(Boolean));
+    const all = new Set([...SECTOR_LIST, ...fromData]);
+    return Array.from(all).sort();
   }, [assets]);
 
   const countries = useMemo(() => {
