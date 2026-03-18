@@ -125,6 +125,9 @@ const Index = () => {
           <Link to="/dashboard" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Dashboard">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
           </Link>
+          <button onClick={generateProjectDocument} className="p-2 rounded-lg hover:bg-muted transition-colors" title="Télécharger le Cahier de Projet (Excel)">
+            <BookOpen className="w-4 h-4 text-muted-foreground" />
+          </button>
           <ThemeToggle />
           <div className="flex items-center gap-1.5 pl-2 border-l border-border">
             <Link to="/profile" className="flex items-center gap-1.5 rounded-lg hover:bg-muted p-1 transition-colors" title="Modifier le profil">
