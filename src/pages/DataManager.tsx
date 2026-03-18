@@ -50,6 +50,27 @@ const COLUMNS: { key: keyof FinancialAsset; label: string; width: string }[] = [
   { key: "description", label: "Description", width: "250px" },
 ];
 
+const SECTOR_LIST = [
+  "Equity", "Fixed Income", "Commodity", "Currency", "Index",
+  "Finance", "Banking", "Insurance", "Asset Management",
+  "Technology", "Software", "Hardware", "Semiconductors",
+  "Healthcare", "Pharmaceuticals", "Biotechnology", "Medical Devices",
+  "Energy", "Oil & Gas", "Renewable Energy", "Utilities",
+  "Real Estate", "REIT", "Construction",
+  "Consumer Goods", "Retail", "E-Commerce", "Food & Beverage", "Luxury",
+  "Industrials", "Manufacturing", "Aerospace & Defense", "Transportation",
+  "Telecommunications", "Media", "Entertainment",
+  "Materials", "Chemicals", "Mining", "Metals",
+  "Agriculture", "Forestry", "Fishing",
+  "Import & Export", "Trade", "Logistics", "Supply Chain",
+  "Government", "Municipal", "Sovereign",
+  "ETF", "ETP", "Mutual Fund", "Hedge Fund",
+  "Derivatives", "Options", "Futures", "Warrants",
+  "Crypto", "Digital Assets",
+  "Private Equity", "Venture Capital",
+  "Other",
+];
+
 const PAGE_SIZE = 50;
 
 interface SavedFile {
@@ -129,8 +150,9 @@ const DataManager = () => {
 
   // Filters
   const sectors = useMemo(() => {
-    const s = new Set(assets.map((a) => a.sector).filter(Boolean));
-    return Array.from(s).sort();
+    const fromData = new Set(assets.map((a) => a.sector).filter(Boolean));
+    const all = new Set([...SECTOR_LIST, ...fromData]);
+    return Array.from(all).sort();
   }, [assets]);
 
   const countries = useMemo(() => {
@@ -509,16 +531,39 @@ const DataManager = () => {
                             >
                               {isEditing ? (
                                 <div className="flex items-center gap-0.5">
-                                  <input
-                                    ref={editRef}
-                                    value={editValue}
-                                    onChange={(e) => setEditValue(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") saveEdit();
-                                      if (e.key === "Escape") cancelEdit();
-                                    }}
-                                    className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
-                                  />
+                                  {col.key === "sector" ? (
+                                    <select
+                                      ref={editRef as any}
+                                      value={editValue}
+                                      onChange={(e) => { setEditValue(e.target.value); }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") saveEdit();
+                                        if (e.key === "Escape") cancelEdit();
+                                      }}
+                                      onBlur={() => saveEdit()}
+                                      className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
+                                      autoFocus
+                                    >
+                                      <option value="">— Aucun —</option>
+                                      {SECTOR_LIST.map((s) => (
+                                        <option key={s} value={s}>{s}</option>
+                                      ))}
+                                      {editValue && !SECTOR_LIST.includes(editValue) && (
+                                        <option value={editValue}>{editValue}</option>
+                                      )}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      ref={editRef}
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") saveEdit();
+                                        if (e.key === "Escape") cancelEdit();
+                                      }}
+                                      className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
+                                    />
+                                  )}
                                   <button onClick={saveEdit} className="p-0.5 text-primary hover:bg-primary/10 rounded">
                                     <Check className="w-3 h-3" />
                                   </button>
