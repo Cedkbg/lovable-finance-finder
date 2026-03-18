@@ -530,16 +530,39 @@ const DataManager = () => {
                             >
                               {isEditing ? (
                                 <div className="flex items-center gap-0.5">
-                                  <input
-                                    ref={editRef}
-                                    value={editValue}
-                                    onChange={(e) => setEditValue(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") saveEdit();
-                                      if (e.key === "Escape") cancelEdit();
-                                    }}
-                                    className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
-                                  />
+                                  {col.key === "sector" ? (
+                                    <select
+                                      ref={editRef as any}
+                                      value={editValue}
+                                      onChange={(e) => { setEditValue(e.target.value); }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") saveEdit();
+                                        if (e.key === "Escape") cancelEdit();
+                                      }}
+                                      onBlur={() => saveEdit()}
+                                      className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
+                                      autoFocus
+                                    >
+                                      <option value="">— Aucun —</option>
+                                      {SECTOR_LIST.map((s) => (
+                                        <option key={s} value={s}>{s}</option>
+                                      ))}
+                                      {editValue && !SECTOR_LIST.includes(editValue) && (
+                                        <option value={editValue}>{editValue}</option>
+                                      )}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      ref={editRef}
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") saveEdit();
+                                        if (e.key === "Escape") cancelEdit();
+                                      }}
+                                      className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
+                                    />
+                                  )}
                                   <button onClick={saveEdit} className="p-0.5 text-primary hover:bg-primary/10 rounded">
                                     <Check className="w-3 h-3" />
                                   </button>

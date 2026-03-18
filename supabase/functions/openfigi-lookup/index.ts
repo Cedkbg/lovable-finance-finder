@@ -237,6 +237,32 @@ const EXCHANGE_TO_ISO: Record<string, string> = {
   'MM': 'MX', 'MX': 'MX',
 };
 
+// Exchange code to MIC code mapping for when OpenFIGI doesn't return micCode
+const EXCHANGE_TO_MIC: Record<string, string> = {
+  'UN': 'XNYS', 'UW': 'XNAS', 'UQ': 'XNAS', 'US': 'XNYS', 'UA': 'ARCX',
+  'LN': 'XLON', 'GB': 'XLON',
+  'FP': 'XPAR', 'PA': 'XPAR',
+  'GR': 'XFRA', 'GY': 'XFRA', 'GF': 'XFRA',
+  'JT': 'XTKS', 'JP': 'XTKS',
+  'HK': 'XHKG',
+  'SS': 'XSHG', 'SZ': 'XSHE',
+  'CT': 'XTSE', 'CA': 'XTSE', 'CN': 'XTSE',
+  'AT': 'XASX', 'AU': 'XASX',
+  'IM': 'XMIL', 'IT': 'XMIL',
+  'SM': 'XMAD', 'MC': 'XMAD',
+  'NA': 'XAMS', 'NL': 'XAMS',
+  'BB': 'XBRU', 'BE': 'XBRU',
+  'SW': 'XSWX', 'SE': 'XSWX', 'VX': 'XSWX',
+  'SP': 'XSES', 'SG': 'XSES',
+  'IB': 'XBOM', 'IN': 'XNSE', 'IS': 'XNSE',
+  'MP': 'XMAU', 'MU': 'XMAU',
+  'SJ': 'XJSE', 'ZA': 'XJSE',
+  'BZ': 'BVMF', 'BR': 'BVMF',
+  'KS': 'XKRX', 'KR': 'XKRX',
+  'TT': 'XTAI', 'TW': 'XTAI',
+  'MM': 'XMEX', 'MX': 'XMEX',
+};
+
 function figiToAsset(figi: any, identifier: string, isIsin: boolean) {
   const exchCode = figi.exchCode || '';
   const ticker = figi.ticker || '';
@@ -244,6 +270,8 @@ function figiToAsset(figi: any, identifier: string, isIsin: boolean) {
   const country = EXCHANGE_TO_COUNTRY[exchCode] || exchCode;
   const countryId = EXCHANGE_TO_ISO[exchCode] || exchCode;
   const isin = isIsin ? identifier : '';
+  // Ensure MIC code is always populated
+  const micCode = figi.micCode || EXCHANGE_TO_MIC[exchCode] || '';
 
   const parts = [figi.name || 'Unknown'];
   if (figi.securityType) parts.push(figi.securityType);
@@ -261,7 +289,7 @@ function figiToAsset(figi: any, identifier: string, isIsin: boolean) {
     symbol: ticker,
     country_id: countryId,
     country: country,
-    mic_code: figi.micCode || '',
+    mic_code: micCode,
     currency_id: figi.securityCurrency || '',
     currency: figi.securityCurrency || '',
     description: description,
