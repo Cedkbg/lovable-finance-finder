@@ -30,7 +30,6 @@ import {
   Star,
   Zap,
   Wifi,
-  BookOpen,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
