@@ -13,6 +13,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import DataManager from "./pages/DataManager";
 import Compare from "./pages/Compare";
+import ProjectDoc from "./pages/ProjectDoc";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
