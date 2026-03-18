@@ -118,6 +118,9 @@ const Index = () => {
           <Link to="/data" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Data Manager">
             <FileSpreadsheet className="w-4 h-4 text-muted-foreground" />
           </Link>
+          <Link to="/compare" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Comparateur">
+            <GitCompare className="w-4 h-4 text-muted-foreground" />
+          </Link>
           <Link to="/dashboard" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Dashboard">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
           </Link>
