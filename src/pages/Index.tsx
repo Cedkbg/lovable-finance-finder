@@ -126,9 +126,6 @@ const Index = () => {
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
           </Link>
           <ThemeToggle />
-          <button onClick={() => generateProjectDocument()} className="p-2 rounded-lg hover:bg-muted transition-colors" title="Cahier de projet (Excel)">
-            <BookOpen className="w-4 h-4 text-muted-foreground" />
-          </button>
           <div className="flex items-center gap-1.5 pl-2 border-l border-border">
             <Link to="/profile" className="flex items-center gap-1.5 rounded-lg hover:bg-muted p-1 transition-colors" title="Modifier le profil">
               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
