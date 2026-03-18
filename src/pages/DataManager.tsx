@@ -50,6 +50,27 @@ const COLUMNS: { key: keyof FinancialAsset; label: string; width: string }[] = [
   { key: "description", label: "Description", width: "250px" },
 ];
 
+const SECTOR_LIST = [
+  "Equity", "Fixed Income", "Commodity", "Currency", "Index",
+  "Finance", "Banking", "Insurance", "Asset Management",
+  "Technology", "Software", "Hardware", "Semiconductors",
+  "Healthcare", "Pharmaceuticals", "Biotechnology", "Medical Devices",
+  "Energy", "Oil & Gas", "Renewable Energy", "Utilities",
+  "Real Estate", "REIT", "Construction",
+  "Consumer Goods", "Retail", "E-Commerce", "Food & Beverage", "Luxury",
+  "Industrials", "Manufacturing", "Aerospace & Defense", "Transportation",
+  "Telecommunications", "Media", "Entertainment",
+  "Materials", "Chemicals", "Mining", "Metals",
+  "Agriculture", "Forestry", "Fishing",
+  "Import & Export", "Trade", "Logistics", "Supply Chain",
+  "Government", "Municipal", "Sovereign",
+  "ETF", "ETP", "Mutual Fund", "Hedge Fund",
+  "Derivatives", "Options", "Futures", "Warrants",
+  "Crypto", "Digital Assets",
+  "Private Equity", "Venture Capital",
+  "Other",
+];
+
 const PAGE_SIZE = 50;
 
 interface SavedFile {
