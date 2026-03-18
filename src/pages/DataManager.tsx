@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useFavorites } from "@/hooks/use-favorites";
 import { dbToFinancialAsset, type DbAsset } from "@/lib/asset-service";
 import type { FinancialAsset } from "@/lib/mock-data";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -12,30 +13,23 @@ import { saveAs } from "file-saver";
 import {
   ArrowLeft,
   Download,
-  Upload,
   Save,
   Trash2,
   Search,
   Filter,
   ChevronLeft,
   ChevronRight,
-  Plus,
   FileSpreadsheet,
-  Edit3,
   Check,
   X,
-  Bold,
-  Italic,
-  Type,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   Loader2,
   RefreshCw,
   FolderOpen,
   FileText,
   BarChart3,
+  Star,
   Zap,
+  Wifi,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -67,12 +61,14 @@ interface SavedFile {
 
 const DataManager = () => {
   const { user } = useAuth();
+  const { toggleFavorite, isFavorite } = useFavorites();
   const [assets, setAssets] = useState<FinancialAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [sectorFilter, setSectorFilter] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [sortKey, setSortKey] = useState<keyof FinancialAsset | "">("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [editingCell, setEditingCell] = useState<{ row: number; col: keyof FinancialAsset } | null>(null);
@@ -80,33 +76,54 @@ const DataManager = () => {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
   const [showFileManager, setShowFileManager] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "disconnected">("disconnected");
   const editRef = useRef<HTMLInputElement>(null);
 
   // Load all assets from DB
   const fetchAssets = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("financial_assets")
-      .select("*")
-      .order("asset_name");
-
-    if (!error && data) {
-      setAssets(data.map((d) => dbToFinancialAsset(d as DbAsset)));
+    // Fetch all assets (handle >1000 rows)
+    let allData: any[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from("financial_assets")
+        .select("*")
+        .order("asset_name")
+        .range(from, from + batchSize - 1);
+      if (error || !data || data.length === 0) break;
+      allData = [...allData, ...data];
+      if (data.length < batchSize) break;
+      from += batchSize;
     }
+    setAssets(allData.map((d) => dbToFinancialAsset(d as DbAsset)));
     setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchAssets();
-    // Load saved files list from localStorage
     const files = JSON.parse(localStorage.getItem("enricher_saved_files") || "[]");
     setSavedFiles(files);
 
-    // Realtime
+    // Realtime subscription
     const channel = supabase
       .channel("datamanager_realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "financial_assets" }, () => fetchAssets())
-      .subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "financial_assets" }, (payload) => {
+        // Granular update instead of full refetch
+        if (payload.eventType === "INSERT" && payload.new) {
+          setAssets((prev) => [...prev, dbToFinancialAsset(payload.new as DbAsset)]);
+        } else if (payload.eventType === "UPDATE" && payload.new) {
+          const updated = dbToFinancialAsset(payload.new as DbAsset);
+          setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+        } else if (payload.eventType === "DELETE" && payload.old) {
+          setAssets((prev) => prev.filter((a) => a.id !== (payload.old as any).id));
+        }
+      })
+      .subscribe((status) => {
+        setRealtimeStatus(status === "SUBSCRIBED" ? "connected" : "disconnected");
+      });
+
     return () => { supabase.removeChannel(channel); };
   }, [fetchAssets]);
 
@@ -123,6 +140,9 @@ const DataManager = () => {
 
   const filtered = useMemo(() => {
     let result = [...assets];
+    if (showFavoritesOnly) {
+      result = result.filter((a) => isFavorite(a.id));
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(
@@ -145,22 +165,17 @@ const DataManager = () => {
       });
     }
     return result;
-  }, [assets, searchQuery, sectorFilter, countryFilter, sortKey, sortDir]);
+  }, [assets, searchQuery, sectorFilter, countryFilter, sortKey, sortDir, showFavoritesOnly, isFavorite]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pageAssets = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const handleSort = (key: keyof FinancialAsset) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
     setPage(0);
   };
 
-  // Edit cell
   const startEdit = (rowIdx: number, col: keyof FinancialAsset) => {
     const asset = pageAssets[rowIdx];
     setEditingCell({ row: rowIdx, col });
@@ -172,15 +187,9 @@ const DataManager = () => {
     if (!editingCell) return;
     const asset = pageAssets[editingCell.row];
     const col = editingCell.col;
-
-    // Map camelCase to snake_case for DB
     const keyMap: Record<string, string> = {
-      assetName: "asset_name",
-      countryId: "country_id",
-      micCode: "mic_code",
-      currencyId: "currency_id",
-      createdAt: "created_at",
-      updatedAt: "updated_at",
+      assetName: "asset_name", countryId: "country_id", micCode: "mic_code",
+      currencyId: "currency_id", createdAt: "created_at", updatedAt: "updated_at",
     };
     const dbCol = keyMap[col] || col;
 
@@ -191,109 +200,65 @@ const DataManager = () => {
 
     if (error) {
       toast.error("Erreur de sauvegarde");
-      console.error(error);
     } else {
       toast.success("Cellule mise à jour");
-      // Update local state
-      setAssets((prev) =>
-        prev.map((a) => (a.id === asset.id ? { ...a, [col]: editValue } : a))
-      );
+      setAssets((prev) => prev.map((a) => (a.id === asset.id ? { ...a, [col]: editValue } : a)));
     }
     setEditingCell(null);
   };
 
-  const cancelEdit = () => {
-    setEditingCell(null);
-    setEditValue("");
-  };
+  const cancelEdit = () => { setEditingCell(null); setEditValue(""); };
 
-  // Delete selected
   const deleteSelected = async () => {
     if (selectedRows.size === 0) return;
     const ids = Array.from(selectedRows);
-    
-    const { error } = await supabase
-      .from("financial_assets")
-      .delete()
-      .in("id", ids);
-
-    if (error) {
-      toast.error("Erreur de suppression");
-    } else {
-      toast.success(`${ids.length} actif(s) supprimé(s)`);
-      setSelectedRows(new Set());
-      fetchAssets();
-    }
+    const { error } = await supabase.from("financial_assets").delete().in("id", ids);
+    if (error) toast.error("Erreur de suppression");
+    else { toast.success(`${ids.length} actif(s) supprimé(s)`); setSelectedRows(new Set()); fetchAssets(); }
   };
 
-  // Export Excel
   const exportExcel = (filename = "enricher_data") => {
     const rows = filtered.map((a, i) => {
       const row: Record<string, string> = { "#": String(i + 1) };
-      COLUMNS.forEach((col) => {
-        row[col.label] = String(a[col.key] || "");
-      });
+      COLUMNS.forEach((col) => { row[col.label] = String(a[col.key] || ""); });
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(rows);
-    
-    // Auto-width columns
     const colWidths = Object.keys(rows[0] || {}).map((key) => ({
       wch: Math.max(key.length, ...rows.map((r) => (r[key] || "").length)).valueOf() + 2,
     }));
     ws["!cols"] = colWidths;
-
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Données");
     const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([buf], { type: "application/octet-stream" });
-    saveAs(blob, `${filename}.xlsx`);
-    toast.success(`Fichier "${filename}.xlsx" exporté`);
+    saveAs(new Blob([buf], { type: "application/octet-stream" }), `${filename}.xlsx`);
+    toast.success(`"${filename}.xlsx" exporté`);
   };
 
-  // Save as named file
   const saveAsFile = () => {
     const name = prompt("Nom du fichier:", `export_${new Date().toISOString().slice(0, 10)}`);
     if (!name) return;
-    
     exportExcel(name);
-    
-    const file: SavedFile = {
-      id: crypto.randomUUID(),
-      name: `${name}.xlsx`,
-      count: filtered.length,
-      createdAt: new Date().toISOString(),
-    };
+    const file: SavedFile = { id: crypto.randomUUID(), name: `${name}.xlsx`, count: filtered.length, createdAt: new Date().toISOString() };
     const updated = [file, ...savedFiles];
     setSavedFiles(updated);
     localStorage.setItem("enricher_saved_files", JSON.stringify(updated));
-    toast.success(`Fichier "${name}.xlsx" enregistré dans le gestionnaire`);
   };
 
-  // Toggle row selection
   const toggleRow = (id: string) => {
-    setSelectedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelectedRows((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
 
   const selectAll = () => {
-    if (selectedRows.size === pageAssets.length) {
-      setSelectedRows(new Set());
-    } else {
-      setSelectedRows(new Set(pageAssets.map((a) => a.id)));
-    }
+    if (selectedRows.size === pageAssets.length) setSelectedRows(new Set());
+    else setSelectedRows(new Set(pageAssets.map((a) => a.id)));
   };
 
-  // Delete a saved file entry
   const deleteSavedFile = (fileId: string) => {
     const updated = savedFiles.filter((f) => f.id !== fileId);
     setSavedFiles(updated);
     localStorage.setItem("enricher_saved_files", JSON.stringify(updated));
-    toast.success("Fichier supprimé du gestionnaire");
+    toast.success("Fichier supprimé");
   };
 
   return (
@@ -304,16 +269,21 @@ const DataManager = () => {
           <Link to="/" className="p-2 rounded-lg hover:bg-muted transition-colors">
             <ArrowLeft className="w-4 h-4 text-foreground" />
           </Link>
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4 text-primary" />
-            <span className="font-mono text-xs font-semibold text-foreground tracking-wide">DATA MANAGER</span>
-            <Badge variant="outline" className="text-[9px] font-mono">
-              {assets.length} ACTIFS
-            </Badge>
+          <FileSpreadsheet className="w-4 h-4 text-primary" />
+          <span className="font-mono text-xs font-semibold text-foreground tracking-wide">DATA MANAGER</span>
+          <Badge variant="outline" className="text-[9px] font-mono">
+            {assets.length} ACTIFS
+          </Badge>
+          {/* Realtime indicator */}
+          <div className="flex items-center gap-1">
+            <div className={`w-2 h-2 rounded-full ${realtimeStatus === "connected" ? "bg-[hsl(var(--success))] animate-pulse" : "bg-destructive"}`} />
+            <span className="font-mono text-[9px] text-muted-foreground">
+              {realtimeStatus === "connected" ? "LIVE" : "OFFLINE"}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/dashboard" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Dashboard">
+          <Link to="/compare" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Comparateur">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
           </Link>
           <ThemeToggle />
@@ -323,7 +293,6 @@ const DataManager = () => {
       {/* Toolbar */}
       <div className="border-b border-border bg-card/50 px-4 py-2">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <input
@@ -335,7 +304,6 @@ const DataManager = () => {
             />
           </div>
 
-          {/* Sector filter */}
           <div className="flex items-center gap-1">
             <Filter className="w-3 h-3 text-muted-foreground" />
             <select
@@ -344,51 +312,34 @@ const DataManager = () => {
               className="h-8 px-2 bg-background border border-input rounded-lg font-mono text-[10px] text-foreground focus:outline-none focus:border-primary"
             >
               <option value="">Tous secteurs</option>
-              {sectors.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
 
-          {/* Country filter */}
           <select
             value={countryFilter}
             onChange={(e) => { setCountryFilter(e.target.value); setPage(0); }}
             className="h-8 px-2 bg-background border border-input rounded-lg font-mono text-[10px] text-foreground focus:outline-none focus:border-primary"
           >
             <option value="">Tous pays</option>
-            {countries.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            {countries.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
 
-          <div className="h-6 w-px bg-border mx-1" />
-
-          {/* Text tools */}
-          <div className="flex items-center gap-0.5">
-            <button className="p-1.5 rounded hover:bg-muted transition-colors" title="Gras">
-              <Bold className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-            <button className="p-1.5 rounded hover:bg-muted transition-colors" title="Italique">
-              <Italic className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-            <button className="p-1.5 rounded hover:bg-muted transition-colors" title="Police">
-              <Type className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-            <button className="p-1.5 rounded hover:bg-muted transition-colors" title="Aligner gauche">
-              <AlignLeft className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-            <button className="p-1.5 rounded hover:bg-muted transition-colors" title="Centrer">
-              <AlignCenter className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-            <button className="p-1.5 rounded hover:bg-muted transition-colors" title="Aligner droite">
-              <AlignRight className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-          </div>
+          {/* Favorites toggle */}
+          <button
+            onClick={() => { setShowFavoritesOnly(!showFavoritesOnly); setPage(0); }}
+            className={`flex items-center gap-1 px-2.5 h-8 rounded-lg font-mono text-[10px] border transition-colors ${
+              showFavoritesOnly
+                ? "bg-[hsl(var(--warning))]/20 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/30"
+                : "bg-secondary text-secondary-foreground border-border hover:border-primary/30"
+            }`}
+          >
+            <Star className={`w-3 h-3 ${showFavoritesOnly ? "fill-current" : ""}`} />
+            FAVORIS
+          </button>
 
           <div className="h-6 w-px bg-border mx-1" />
 
-          {/* Actions */}
           <button
             onClick={() => fetchAssets()}
             className="flex items-center gap-1 px-2.5 h-8 rounded-lg bg-secondary text-secondary-foreground font-mono text-[10px] border border-border hover:border-primary/30 transition-colors"
@@ -448,16 +399,12 @@ const DataManager = () => {
                 </h3>
                 {savedFiles.length === 0 ? (
                   <p className="text-muted-foreground text-xs text-center py-8">
-                    Aucun fichier enregistré.<br />
-                    Cliquez "Enregistrer sous" pour créer un fichier.
+                    Aucun fichier enregistré.
                   </p>
                 ) : (
                   <div className="space-y-1.5">
                     {savedFiles.map((file) => (
-                      <div
-                        key={file.id}
-                        className="group flex items-center gap-2 p-2 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/50 transition-colors"
-                      >
+                      <div key={file.id} className="group flex items-center gap-2 p-2 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/50 transition-colors">
                         <FileText className="w-4 h-4 text-primary flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="font-mono text-[11px] text-foreground truncate">{file.name}</p>
@@ -465,10 +412,7 @@ const DataManager = () => {
                             {file.count} actifs · {new Date(file.createdAt).toLocaleDateString("fr-FR")}
                           </p>
                         </div>
-                        <button
-                          onClick={() => deleteSavedFile(file.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 transition-all"
-                        >
+                        <button onClick={() => deleteSavedFile(file.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 transition-all">
                           <Trash2 className="w-3 h-3 text-destructive" />
                         </button>
                       </div>
@@ -488,7 +432,6 @@ const DataManager = () => {
             </div>
           ) : (
             <>
-              {/* Excel-like table */}
               <div className="flex-1 overflow-auto">
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 z-10 bg-muted">
@@ -501,9 +444,10 @@ const DataManager = () => {
                           className="w-3.5 h-3.5 rounded border-input accent-primary"
                         />
                       </th>
-                      <th className="w-10 px-2 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground">
-                        #
+                      <th className="w-8 px-1 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground text-center">
+                        <Star className="w-3 h-3 mx-auto text-muted-foreground" />
                       </th>
+                      <th className="w-10 px-2 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground">#</th>
                       {COLUMNS.map((col) => (
                         <th
                           key={col.key}
@@ -536,6 +480,20 @@ const DataManager = () => {
                             onChange={() => toggleRow(asset.id)}
                             className="w-3.5 h-3.5 rounded border-input accent-primary"
                           />
+                        </td>
+                        <td className="px-1 py-1 border-b border-r border-border/50 text-center">
+                          <button
+                            onClick={() => toggleFavorite(asset.id)}
+                            className="p-0.5 rounded hover:bg-[hsl(var(--warning))]/10 transition-colors"
+                          >
+                            <Star
+                              className={`w-3.5 h-3.5 transition-colors ${
+                                isFavorite(asset.id)
+                                  ? "text-[hsl(var(--warning))] fill-[hsl(var(--warning))]"
+                                  : "text-muted-foreground/30 hover:text-[hsl(var(--warning))]/50"
+                              }`}
+                            />
+                          </button>
                         </td>
                         <td className="px-2 py-1 border-b border-r border-border/50 font-mono text-[10px] text-muted-foreground text-center">
                           {page * PAGE_SIZE + rowIdx + 1}
@@ -592,7 +550,7 @@ const DataManager = () => {
                 <div className="flex items-center gap-3">
                   <p className="font-mono text-[10px] text-muted-foreground">
                     {filtered.length} actif{filtered.length > 1 ? "s" : ""}
-                    {(sectorFilter || countryFilter || searchQuery) && " (filtré)"}
+                    {(sectorFilter || countryFilter || searchQuery || showFavoritesOnly) && " (filtré)"}
                   </p>
                   <p className="font-mono text-[10px] text-muted-foreground">
                     Page {page + 1}/{totalPages || 1}
