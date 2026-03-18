@@ -1,10 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User, FileSpreadsheet, GitCompare, BookOpen } from "lucide-react";
+import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User, FileSpreadsheet, GitCompare } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { searchAsset } from "@/lib/asset-service";
-import { generateProjectDocument } from "@/lib/generate-project-doc";
 import type { FinancialAsset } from "@/lib/mock-data";
 import AssetTable from "@/components/AssetTable";
 import SkeletonGrid from "@/components/SkeletonGrid";
@@ -126,9 +125,6 @@ const Index = () => {
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
           </Link>
           <ThemeToggle />
-          <button onClick={() => generateProjectDocument()} className="p-2 rounded-lg hover:bg-muted transition-colors" title="Cahier de projet (Excel)">
-            <BookOpen className="w-4 h-4 text-muted-foreground" />
-          </button>
           <div className="flex items-center gap-1.5 pl-2 border-l border-border">
             <Link to="/profile" className="flex items-center gap-1.5 rounded-lg hover:bg-muted p-1 transition-colors" title="Modifier le profil">
               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">

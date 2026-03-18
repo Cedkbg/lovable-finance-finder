@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { generateProjectDocument } from "@/lib/generate-project-doc";
 import {
   ArrowLeft,
   Download,
@@ -31,7 +30,6 @@ import {
   Star,
   Zap,
   Wifi,
-  BookOpen,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -310,9 +308,6 @@ const DataManager = () => {
           <Link to="/compare" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Comparateur">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
           </Link>
-          <button onClick={() => generateProjectDocument()} className="p-2 rounded-lg hover:bg-muted transition-colors" title="Télécharger le Cahier de Projet (Excel)">
-            <BookOpen className="w-4 h-4 text-muted-foreground" />
-          </button>
           <ThemeToggle />
         </div>
       </header>
