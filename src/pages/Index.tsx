@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User, FileSpreadsheet } from "lucide-react";
+import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User, FileSpreadsheet, GitCompare } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { searchAsset } from "@/lib/asset-service";
