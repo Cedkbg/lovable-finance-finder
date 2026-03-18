@@ -1,4 +1,3 @@
--- Tighten insert policy for access requests to avoid permissive TRUE checks
 DROP POLICY IF EXISTS "Anyone can create access request" ON public.access_requests;
 
 CREATE POLICY "Anyone can create access request"

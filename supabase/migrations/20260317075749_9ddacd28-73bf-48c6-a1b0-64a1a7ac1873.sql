@@ -1,5 +1,4 @@
 
--- 1. Profiles table
 CREATE TABLE public.profiles (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -28,7 +27,6 @@ ON public.profiles FOR INSERT
 TO authenticated
 WITH CHECK (auth.uid() = user_id);
 
--- Auto-create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -42,18 +40,13 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Trigger for updated_at on profiles
 CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- 2. Add user_id to financial_assets (nullable for backward compat with existing data)
 ALTER TABLE public.financial_assets ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 
--- Update existing seed data to be accessible to all (null user_id = public)
--- New assets will have user_id set
 
--- 3. Update RLS on financial_assets: users see their own + public (null user_id) assets
 DROP POLICY IF EXISTS "Anyone can read financial assets" ON public.financial_assets;
 DROP POLICY IF EXISTS "Anyone can insert financial assets" ON public.financial_assets;
 DROP POLICY IF EXISTS "Anyone can update financial assets" ON public.financial_assets;

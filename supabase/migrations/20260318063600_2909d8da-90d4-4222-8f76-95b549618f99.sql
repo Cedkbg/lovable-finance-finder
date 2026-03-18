@@ -1,5 +1,4 @@
 
--- Favorites table
 CREATE TABLE public.favorites (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
@@ -19,5 +18,4 @@ CREATE POLICY "Users can insert own favorites" ON public.favorites
 CREATE POLICY "Users can delete own favorites" ON public.favorites
   FOR DELETE TO authenticated USING (user_id = auth.uid());
 
--- Enable realtime for favorites
 ALTER PUBLICATION supabase_realtime ADD TABLE public.favorites;
