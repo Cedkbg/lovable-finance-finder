@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
+import DataManager from "./pages/DataManager";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
