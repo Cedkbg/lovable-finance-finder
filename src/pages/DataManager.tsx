@@ -34,6 +34,8 @@ import {
   Zap,
   Wifi,
   Eye,
+  ChevronDown,
+  Globe,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
