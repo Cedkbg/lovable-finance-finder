@@ -4,8 +4,7 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 
 export default defineConfig(({ mode }) => ({
-  // 🔥 IMPORTANT POUR GITHUB PAGES
-  base: "/lovable-finance-finder/",
+  base: "/",
 
   server: {
     host: "::",
