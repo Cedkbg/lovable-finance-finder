@@ -817,38 +817,99 @@ const DataManager = () => {
                 {savedFiles.length === 0 ? (
                   <p className="text-muted-foreground text-xs text-center py-8">Aucun fichier enregistré.</p>
                 ) : (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {savedFiles.map((file) => {
                       const isActive = activeSavedFileId === file.id;
+                      const stats = getFilePreviewStats(file);
+                      const hasFilters = file.filters.sectorFilter || file.filters.countryFilter || file.filters.searchQuery || file.filters.showFavoritesOnly;
                       return (
-                        <button
+                        <div
                           key={file.id}
-                          onClick={() => openSavedFile(file)}
-                          className={`w-full group flex items-center gap-2 p-2 rounded-lg border text-left transition-colors ${
+                          className={`rounded-lg border transition-colors ${
                             isActive
                               ? "border-primary bg-primary/5"
-                              : "border-border hover:border-primary/30 hover:bg-muted/50"
+                              : "border-border hover:border-primary/30"
                           }`}
                         >
-                          <FileText className="w-4 h-4 text-primary flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-mono text-[11px] text-foreground truncate">{file.name}</p>
-                            <p className="font-mono text-[9px] text-muted-foreground">
-                              {file.count} actifs · {new Date(file.createdAt).toLocaleDateString("fr-FR")}
-                            </p>
-                          </div>
-                          <Eye className={`w-3.5 h-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteSavedFile(file.id);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 transition-all"
-                            title="Supprimer"
+                            onClick={() => openSavedFile(file)}
+                            className="w-full flex items-center gap-2 p-2 text-left"
                           >
-                            <Trash2 className="w-3 h-3 text-destructive" />
+                            <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-mono text-[11px] text-foreground truncate">{file.name}</p>
+                              <p className="font-mono text-[9px] text-muted-foreground">
+                                {file.count} actifs · {new Date(file.createdAt).toLocaleDateString("fr-FR")}
+                                {stats.liveCount !== file.count && (
+                                  <span className="text-[hsl(var(--warning))]"> (live: {stats.liveCount})</span>
+                                )}
+                              </p>
+                            </div>
+                            <Eye className={`w-3.5 h-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                           </button>
-                        </button>
+
+                          {/* Detailed preview */}
+                          <div className="px-2 pb-2 space-y-1">
+                            {hasFilters && (
+                              <div className="flex flex-wrap gap-1">
+                                {file.filters.countryFilter && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-mono text-[8px]">
+                                    🌍 {file.filters.countryFilter}
+                                  </span>
+                                )}
+                                {file.filters.sectorFilter && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-mono text-[8px]">
+                                    📊 {file.filters.sectorFilter}
+                                  </span>
+                                )}
+                                {file.filters.searchQuery && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-mono text-[8px]">
+                                    🔍 "{file.filters.searchQuery}"
+                                  </span>
+                                )}
+                                {file.filters.showFavoritesOnly && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))] font-mono text-[8px]">
+                                    ⭐ Favoris
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {stats.topCountries.length > 0 && (
+                              <p className="font-mono text-[8px] text-muted-foreground truncate">
+                                Pays: {stats.topCountries.map(([c, n]) => `${c} (${n})`).join(", ")}
+                              </p>
+                            )}
+                            {stats.topSectors.length > 0 && (
+                              <p className="font-mono text-[8px] text-muted-foreground truncate">
+                                Secteurs: {stats.topSectors.map(([s, n]) => `${s} (${n})`).join(", ")}
+                              </p>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 pt-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  refreshSavedFile(file.id);
+                                }}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[8px] hover:bg-primary/20 transition-colors"
+                                title="Mettre à jour avec les données live"
+                              >
+                                <RefreshCw className="w-2.5 h-2.5" /> METTRE À JOUR
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteSavedFile(file.id);
+                                }}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-mono text-[8px] hover:bg-destructive/20 transition-colors"
+                                title="Supprimer"
+                              >
+                                <Trash2 className="w-2.5 h-2.5" /> SUPPRIMER
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
