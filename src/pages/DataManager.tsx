@@ -9,7 +9,7 @@ import { normalizeCountryLabel, normalizeSectorLabel, SECTOR_TAXONOMY } from "@/
 import type { FinancialAsset } from "@/lib/mock-data";
 import ThemeToggle from "@/components/ThemeToggle";
 import { toast } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import {
