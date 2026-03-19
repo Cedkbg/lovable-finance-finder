@@ -6,6 +6,7 @@ import { useFavorites } from "@/hooks/use-favorites";
 import { dbToFinancialAsset, type DbAsset } from "@/lib/asset-service";
 import { getCountryCodes } from "@/lib/country-codes";
 import { normalizeCountryLabel, normalizeSectorLabel, SECTOR_TAXONOMY } from "@/lib/asset-labels";
+import { COUNTRY_ZONES } from "@/lib/country-zones";
 import type { FinancialAsset } from "@/lib/mock-data";
 import ThemeToggle from "@/components/ThemeToggle";
 import { toast } from "sonner";
