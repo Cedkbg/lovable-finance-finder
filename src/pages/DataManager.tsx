@@ -454,6 +454,63 @@ const DataManager = () => {
     toast.success("Fichier supprimé");
   };
 
+  const refreshSavedFile = (fileId: string) => {
+    const file = savedFiles.find((f) => f.id === fileId);
+    if (!file) return;
+
+    // Re-apply the saved filters to get fresh data
+    let result = [...assets];
+    const f = file.filters;
+    if (f.showFavoritesOnly) result = result.filter((a) => isFavorite(a.id));
+    if (f.searchQuery) {
+      const q = f.searchQuery.toLowerCase();
+      result = result.filter((a) =>
+        a.assetName.toLowerCase().includes(q) ||
+        a.isin.toLowerCase().includes(q) ||
+        a.ticker.toLowerCase().includes(q) ||
+        a.symbol.toLowerCase().includes(q) ||
+        a.ric.toLowerCase().includes(q) ||
+        normalizeCountryLabel(a.country, a.countryId, a.micCode).toLowerCase().includes(q) ||
+        normalizeSectorLabel(a.sector).toLowerCase().includes(q)
+      );
+    }
+    if (f.sectorFilter) result = result.filter((a) => normalizeSectorLabel(a.sector) === f.sectorFilter);
+    if (f.countryFilter) result = result.filter((a) => normalizeCountryLabel(a.country, a.countryId, a.micCode) === f.countryFilter);
+
+    const updatedFile: SavedFile = {
+      ...file,
+      assetIds: result.map((a) => a.id),
+      count: result.length,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedFiles = savedFiles.map((sf) => (sf.id === fileId ? updatedFile : sf));
+    setSavedFiles(updatedFiles);
+    persistSavedFiles(updatedFiles);
+
+    if (activeSavedFileId === fileId) {
+      setActiveSavedFileId(null);
+      setTimeout(() => setActiveSavedFileId(fileId), 0);
+    }
+
+    toast.success(`"${file.name}" mis à jour avec ${result.length} actifs`);
+  };
+
+  const getFilePreviewStats = (file: SavedFile) => {
+    const matchedAssets = assets.filter((a) => file.assetIds.includes(a.id));
+    const countryCounts = new Map<string, number>();
+    const sectorCounts = new Map<string, number>();
+    for (const a of matchedAssets) {
+      const c = normalizeCountryLabel(a.country, a.countryId, a.micCode);
+      const s = normalizeSectorLabel(a.sector);
+      if (c && c !== "Unknown") countryCounts.set(c, (countryCounts.get(c) || 0) + 1);
+      if (s) sectorCounts.set(s, (sectorCounts.get(s) || 0) + 1);
+    }
+    const topCountries = Array.from(countryCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const topSectors = Array.from(sectorCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    return { topCountries, topSectors, liveCount: matchedAssets.length };
+  };
+
   const enrichByFilters = async () => {
     if (!user?.id) {
       toast.error("Session utilisateur requise");
