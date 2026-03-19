@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Globe, Loader2, RefreshCw, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { dbToFinancialAsset, type DbAsset } from "@/lib/asset-service";
@@ -6,6 +6,7 @@ import { getCountryCodes } from "@/lib/country-codes";
 import { COUNTRY_ZONES } from "@/lib/country-zones";
 import type { FinancialAsset } from "@/lib/mock-data";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 
 interface CountrySearchProps {
   onResults: (assets: FinancialAsset[], country: string) => void;
@@ -18,9 +19,64 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
   const [importProgress, setImportProgress] = useState("");
   const [showZones, setShowZones] = useState(false);
   const [expandedZone, setExpandedZone] = useState<string | null>(null);
+  const [zoneCounts, setZoneCounts] = useState<Record<string, number>>({});
+  const [countryCounts, setCountryCounts] = useState<Record<string, number>>({});
 
-  const selectCountry = (query: string, label: string) => {
-    if (!query) return; // separator
+  // Load asset counts per zone and per country
+  const loadCounts = useCallback(async () => {
+    try {
+      // Get all assets with country info
+      const { data, error } = await supabase
+        .from("financial_assets")
+        .select("country, country_id, mic_code");
+
+      if (error || !data) return;
+
+      const cCounts: Record<string, number> = {};
+      const zCounts: Record<string, number> = {};
+
+      // Count per country query
+      for (const zone of COUNTRY_ZONES) {
+        let zoneTotal = 0;
+        for (const c of zone.countries) {
+          if (!c.query) continue;
+          const codes = getCountryCodes(c.query);
+          let count = 0;
+          for (const row of data) {
+            const rowCountry = (row.country || "").toUpperCase();
+            const rowId = (row.country_id || "").toUpperCase();
+            const rowMic = (row.mic_code || "").toUpperCase();
+            if (
+              codes.some(
+                (code) =>
+                  rowCountry === code.toUpperCase() ||
+                  rowId === code.toUpperCase() ||
+                  rowMic === code.toUpperCase() ||
+                  rowCountry.includes(c.query.toUpperCase())
+              )
+            ) {
+              count++;
+            }
+          }
+          cCounts[c.query] = count;
+          zoneTotal += count;
+        }
+        zCounts[zone.zone] = zoneTotal;
+      }
+
+      setCountryCounts(cCounts);
+      setZoneCounts(zCounts);
+    } catch {
+      // silent
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCounts();
+  }, [loadCounts]);
+
+  const selectCountry = (query: string) => {
+    if (!query) return;
     setCountry(query);
     setShowZones(false);
     setExpandedZone(null);
@@ -128,6 +184,9 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
       if (data.hasMore) {
         toast.info("Il y a plus de résultats disponibles. Ajoutez une clé API OpenFIGI pour tout récupérer.");
       }
+
+      // Refresh counts after import
+      loadCounts();
     } catch (err) {
       console.error("Import error:", err);
       toast.error("Erreur lors de l'import");
@@ -170,7 +229,14 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
                     className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground bg-muted/50 hover:bg-muted transition-colors sticky top-0"
                   >
                     <span>{zone.emoji} {zone.zone}</span>
-                    <ChevronDown className={`w-3 h-3 transition-transform ${expandedZone === zone.zone ? "rotate-180" : ""}`} />
+                    <span className="flex items-center gap-2">
+                      {(zoneCounts[zone.zone] || 0) > 0 && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono">
+                          {zoneCounts[zone.zone].toLocaleString()}
+                        </Badge>
+                      )}
+                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedZone === zone.zone ? "rotate-180" : ""}`} />
+                    </span>
                   </button>
                   {expandedZone === zone.zone && (
                     <div className="py-1">
@@ -183,10 +249,15 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
                           <button
                             key={c.query}
                             type="button"
-                            onClick={() => selectCountry(c.query, c.label)}
-                            className="w-full text-left px-4 py-1.5 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-colors font-mono"
+                            onClick={() => selectCountry(c.query)}
+                            className="w-full flex items-center justify-between px-4 py-1.5 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-colors font-mono"
                           >
-                            {c.label}
+                            <span>{c.label}</span>
+                            {(countryCounts[c.query] || 0) > 0 && (
+                              <span className="text-[10px] text-muted-foreground tabular-nums">
+                                {countryCounts[c.query].toLocaleString()}
+                              </span>
+                            )}
                           </button>
                         )
                       )}
