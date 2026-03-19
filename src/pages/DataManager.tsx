@@ -116,6 +116,8 @@ const DataManager = () => {
   const [showFileManager, setShowFileManager] = useState(false);
   const [enrichingFilters, setEnrichingFilters] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "disconnected">("disconnected");
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
 
   const persistSavedFiles = useCallback((files: SavedFile[]) => {
