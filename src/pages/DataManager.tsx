@@ -815,13 +815,9 @@ const DataManager = () => {
 
       <div className="flex flex-1 overflow-hidden">
         {/* File Manager Sidebar */}
-        <AnimatePresence>
-          {showFileManager && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 300, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              className="border-r border-border bg-card overflow-y-auto flex-shrink-0"
+        {showFileManager && (
+            <div
+              className="w-[300px] border-r border-border bg-card overflow-y-auto flex-shrink-0 animate-in slide-in-from-left-5 duration-200"
             >
               <div className="p-3">
                 <h3 className="font-mono text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">
@@ -835,6 +831,7 @@ const DataManager = () => {
                       const isActive = activeSavedFileId === file.id;
                       const stats = getFilePreviewStats(file);
                       const hasFilters = file.filters.sectorFilter || file.filters.countryFilter || file.filters.searchQuery || file.filters.showFavoritesOnly;
+                      const isRenaming = renamingFileId === file.id;
                       return (
                         <div
                           key={file.id}
@@ -844,19 +841,43 @@ const DataManager = () => {
                               : "border-border hover:border-primary/30"
                           }`}
                         >
+                          {/* File header - clickable to open */}
                           <button
                             onClick={() => openSavedFile(file)}
                             className="w-full flex items-center gap-2 p-2 text-left"
                           >
-                            <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                            <FileText className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                             <div className="flex-1 min-w-0">
-                              <p className="font-mono text-[11px] text-foreground truncate">{file.name}</p>
-                              <p className="font-mono text-[9px] text-muted-foreground">
-                                {file.count} actifs · {new Date(file.createdAt).toLocaleDateString("fr-FR")}
-                                {stats.liveCount !== file.count && (
-                                  <span className="text-[hsl(var(--warning))]"> (live: {stats.liveCount})</span>
-                                )}
-                              </p>
+                              {isRenaming ? (
+                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    autoFocus
+                                    value={renameValue}
+                                    onChange={(e) => setRenameValue(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") renameSavedFile(file.id, renameValue);
+                                      if (e.key === "Escape") setRenamingFileId(null);
+                                    }}
+                                    className="w-full h-5 px-1 bg-background border border-primary rounded text-[10px] font-mono focus:outline-none"
+                                  />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); renameSavedFile(file.id, renameValue); }}
+                                    className="p-0.5 text-primary hover:bg-primary/10 rounded"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="font-mono text-[11px] text-foreground truncate">{file.name}</p>
+                                  <p className="font-mono text-[9px] text-muted-foreground">
+                                    {file.count} actifs · {new Date(file.createdAt).toLocaleDateString("fr-FR")}
+                                    {stats.liveCount !== file.count && (
+                                      <span className="text-[hsl(var(--warning))]"> (live: {stats.liveCount})</span>
+                                    )}
+                                  </p>
+                                </>
+                              )}
                             </div>
                             <Eye className={`w-3.5 h-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                           </button>
@@ -908,7 +929,28 @@ const DataManager = () => {
                                 className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[8px] hover:bg-primary/20 transition-colors"
                                 title="Mettre à jour avec les données live"
                               >
-                                <RefreshCw className="w-2.5 h-2.5" /> METTRE À JOUR
+                                <RefreshCw className="w-2.5 h-2.5" /> MAJ
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRenamingFileId(file.id);
+                                  setRenameValue(file.name.replace(/\.xlsx$/, ""));
+                                }}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-mono text-[8px] hover:bg-accent/80 transition-colors"
+                                title="Renommer"
+                              >
+                                ✏️ RENOMMER
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  exportExcel(file.name.replace(/\.xlsx$/, ""));
+                                }}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-mono text-[8px] hover:bg-accent/80 transition-colors"
+                                title="Re-télécharger"
+                              >
+                                <Download className="w-2.5 h-2.5" />
                               </button>
                               <button
                                 onClick={(e) => {
@@ -918,7 +960,7 @@ const DataManager = () => {
                                 className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-mono text-[8px] hover:bg-destructive/20 transition-colors"
                                 title="Supprimer"
                               >
-                                <Trash2 className="w-2.5 h-2.5" /> SUPPRIMER
+                                <Trash2 className="w-2.5 h-2.5" />
                               </button>
                             </div>
                           </div>
@@ -928,9 +970,8 @@ const DataManager = () => {
                   </div>
                 )}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+        )}
 
         {/* Main Table */}
         <div className="flex-1 flex flex-col overflow-hidden">
