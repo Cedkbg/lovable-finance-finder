@@ -456,6 +456,17 @@ const DataManager = () => {
     toast.success("Fichier supprimé");
   };
 
+  const renameSavedFile = (fileId: string, newName: string) => {
+    if (!newName.trim()) return;
+    const updated = savedFiles.map((f) =>
+      f.id === fileId ? { ...f, name: newName.trim().endsWith(".xlsx") ? newName.trim() : `${newName.trim()}.xlsx` } : f,
+    );
+    setSavedFiles(updated);
+    persistSavedFiles(updated);
+    setRenamingFileId(null);
+    toast.success("Fichier renommé");
+  };
+
   const refreshSavedFile = (fileId: string) => {
     const file = savedFiles.find((f) => f.id === fileId);
     if (!file) return;
