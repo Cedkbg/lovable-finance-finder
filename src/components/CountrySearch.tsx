@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Globe, Loader2, RefreshCw } from "lucide-react";
+import { Globe, Loader2, RefreshCw, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { dbToFinancialAsset, type DbAsset } from "@/lib/asset-service";
 import { getCountryCodes } from "@/lib/country-codes";
+import { COUNTRY_ZONES } from "@/lib/country-zones";
 import type { FinancialAsset } from "@/lib/mock-data";
 import { toast } from "sonner";
 
@@ -15,6 +16,15 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState("");
+  const [showZones, setShowZones] = useState(false);
+  const [expandedZone, setExpandedZone] = useState<string | null>(null);
+
+  const selectCountry = (query: string, label: string) => {
+    if (!query) return; // separator
+    setCountry(query);
+    setShowZones(false);
+    setExpandedZone(null);
+  };
 
   const handleSearch = async () => {
     const q = country.trim();
@@ -45,7 +55,6 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
     setLoading(false);
   };
 
-  // Import ALL exchanges for a country via multi-exchange endpoint
   const handleBatchImport = async () => {
     const q = country.trim();
     if (!q) return;
@@ -63,13 +72,11 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
     const userId = userData.user?.id;
 
     try {
-      // Use multi-exchange endpoint to query ALL exchanges at once
       const { data, error } = await supabase.functions.invoke("openfigi-lookup", {
         body: { exchCodes: codes },
       });
 
       if (error || !data?.assets) {
-        console.warn("No results for exchanges:", codes, error);
         toast.error(`Aucun actif trouvé pour "${q}" sur OpenFIGI`);
         setImporting(false);
         setImportProgress("");
@@ -79,7 +86,6 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
       const assets = data.assets;
       setImportProgress(`${assets.length} actifs trouvés, sauvegarde en cours...`);
 
-      // Batch upsert in chunks of 50
       let saved = 0;
       for (let i = 0; i < assets.length; i += 50) {
         const chunk = assets.slice(i, i + 50).map((a: any) => ({
@@ -97,7 +103,6 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
         setImportProgress(`${saved}/${assets.length} sauvegardés...`);
       }
 
-      // Reload from DB
       setImportProgress("Chargement des résultats...");
       const filters: string[] = [];
       for (const code of codes) {
@@ -133,7 +138,7 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 relative">
       <div className="relative flex-1">
         <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
         <input
@@ -141,9 +146,57 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
           value={country}
           onChange={(e) => setCountry(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          placeholder="Pays (ex: France, US, Mauritius...)"
-          className="w-full h-9 pl-9 pr-3 bg-background border border-input rounded-lg font-mono text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+          onFocus={() => setShowZones(true)}
+          placeholder="Pays, zone ou groupe (ex: France, Afrique Émergente...)"
+          className="w-full h-9 pl-9 pr-8 bg-background border border-input rounded-lg font-mono text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
         />
+        <button
+          type="button"
+          onClick={() => setShowZones(!showZones)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showZones ? "rotate-180" : ""}`} />
+        </button>
+
+        {showZones && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => { setShowZones(false); setExpandedZone(null); }} />
+            <div className="absolute top-full left-0 mt-1 w-full max-h-80 overflow-y-auto z-50 rounded-lg border border-border bg-popover shadow-lg">
+              {COUNTRY_ZONES.map((zone) => (
+                <div key={zone.zone}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedZone(expandedZone === zone.zone ? null : zone.zone)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground bg-muted/50 hover:bg-muted transition-colors sticky top-0"
+                  >
+                    <span>{zone.emoji} {zone.zone}</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${expandedZone === zone.zone ? "rotate-180" : ""}`} />
+                  </button>
+                  {expandedZone === zone.zone && (
+                    <div className="py-1">
+                      {zone.countries.map((c, i) =>
+                        c.query === "" ? (
+                          <div key={i} className="px-3 py-1 text-[10px] text-muted-foreground font-mono select-none">
+                            {c.label}
+                          </div>
+                        ) : (
+                          <button
+                            key={c.query}
+                            type="button"
+                            onClick={() => selectCountry(c.query, c.label)}
+                            className="w-full text-left px-4 py-1.5 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-colors font-mono"
+                          >
+                            {c.label}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
       <button
         onClick={handleSearch}
