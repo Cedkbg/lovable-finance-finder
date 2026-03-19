@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeCountryLabel, normalizeSectorLabel } from "@/lib/asset-labels";
 import { MOCK_DATA, type FinancialAsset } from "./mock-data";
 
 export interface DbAsset {
@@ -27,17 +28,17 @@ export function dbToFinancialAsset(db: DbAsset): FinancialAsset {
     id: db.id,
     assetName: db.asset_name,
     isin: db.isin,
-    sector: db.sector || "",
+    sector: normalizeSectorLabel(db.sector),
     acf: db.acf || "",
     ric: db.ric || "",
     ticker: db.ticker || "",
     symbol: db.symbol || "",
     createdAt: db.created_at,
     updatedAt: db.updated_at,
-    countryId: db.country_id || "",
-    country: db.country || "",
+    countryId: (db.country_id || "").toUpperCase(),
+    country: normalizeCountryLabel(db.country, db.country_id, db.mic_code),
     micCode: db.mic_code || "",
-    currencyId: db.currency_id || "",
+    currencyId: (db.currency_id || "").toUpperCase(),
     currency: db.currency || "",
     description: db.description || "",
     source: db.source || "",
@@ -52,7 +53,7 @@ async function getCurrentUserId(): Promise<string | null> {
 // CAS 1: Search in database
 async function searchInDb(query: string): Promise<FinancialAsset | null> {
   const q = query.trim().toUpperCase();
-  
+
   const { data, error } = await supabase
     .from("financial_assets")
     .select("*")
@@ -92,7 +93,7 @@ async function searchViaOpenFigi(query: string): Promise<FinancialAsset | null> 
 
     // If no ISIN returned, generate a placeholder to allow DB storage
     if (!asset.isin) {
-      asset.isin = `NOISIN-${asset.ticker || query.trim().toUpperCase()}-${asset.country_id || 'XX'}`;
+      asset.isin = `NOISIN-${asset.ticker || query.trim().toUpperCase()}-${asset.country_id || "XX"}`;
     }
 
     // Save to DB for future lookups
@@ -124,20 +125,20 @@ async function searchViaOpenFigi(query: string): Promise<FinancialAsset | null> 
 async function saveToUserDb(asset: FinancialAsset): Promise<void> {
   const userId = await getCurrentUserId();
   if (!userId) return;
-  
+
   await supabase.from("financial_assets").upsert(
     {
       asset_name: asset.assetName,
       isin: asset.isin,
-      sector: asset.sector,
+      sector: normalizeSectorLabel(asset.sector),
       acf: asset.acf,
       ric: asset.ric,
       ticker: asset.ticker,
       symbol: asset.symbol,
-      country_id: asset.countryId,
-      country: asset.country,
+      country_id: (asset.countryId || "").toUpperCase(),
+      country: normalizeCountryLabel(asset.country, asset.countryId, asset.micCode),
       mic_code: asset.micCode,
-      currency_id: asset.currencyId,
+      currency_id: (asset.currencyId || "").toUpperCase(),
       currency: asset.currency,
       description: asset.description,
       source: "local_dataset",
@@ -174,11 +175,11 @@ export async function bulkEnrich(
   onProgress?: (done: number, total: number) => void
 ): Promise<{ results: Array<{ identifier: string; asset: FinancialAsset | null; source: string }> }> {
   const results: Array<{ identifier: string; asset: FinancialAsset | null; source: string }> = [];
-  
+
   for (let i = 0; i < identifiers.length; i++) {
     const id = identifiers[i].trim();
     if (!id) continue;
-    
+
     const { asset, source } = await searchAsset(id);
     results.push({ identifier: id, asset, source });
     onProgress?.(i + 1, identifiers.length);

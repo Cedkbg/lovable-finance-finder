@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useFavorites } from "@/hooks/use-favorites";
 import { dbToFinancialAsset, type DbAsset } from "@/lib/asset-service";
+import { getCountryCodes } from "@/lib/country-codes";
+import { normalizeCountryLabel, normalizeSectorLabel, SECTOR_TAXONOMY } from "@/lib/asset-labels";
 import type { FinancialAsset } from "@/lib/mock-data";
 import ThemeToggle from "@/components/ThemeToggle";
 import { toast } from "sonner";
@@ -30,6 +32,7 @@ import {
   Star,
   Zap,
   Wifi,
+  Eye,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -40,45 +43,58 @@ const COLUMNS: { key: keyof FinancialAsset; label: string; width: string }[] = [
   { key: "symbol", label: "Symbol", width: "80px" },
   { key: "ric", label: "RIC", width: "120px" },
   { key: "acf", label: "ACF/FIGI", width: "140px" },
-  { key: "sector", label: "Secteur", width: "120px" },
-  { key: "country", label: "Pays", width: "120px" },
-  { key: "countryId", label: "Code Pays", width: "80px" },
-  { key: "micCode", label: "MIC", width: "80px" },
-  { key: "currency", label: "Devise", width: "80px" },
-  { key: "currencyId", label: "Code Devise", width: "80px" },
-  { key: "source", label: "Source", width: "80px" },
-  { key: "description", label: "Description", width: "250px" },
-];
-
-const SECTOR_LIST = [
-  "Equity", "Fixed Income", "Commodity", "Currency", "Index",
-  "Finance", "Banking", "Insurance", "Asset Management",
-  "Technology", "Software", "Hardware", "Semiconductors",
-  "Healthcare", "Pharmaceuticals", "Biotechnology", "Medical Devices",
-  "Energy", "Oil & Gas", "Renewable Energy", "Utilities",
-  "Real Estate", "REIT", "Construction",
-  "Consumer Goods", "Retail", "E-Commerce", "Food & Beverage", "Luxury",
-  "Industrials", "Manufacturing", "Aerospace & Defense", "Transportation",
-  "Telecommunications", "Media", "Entertainment",
-  "Materials", "Chemicals", "Mining", "Metals",
-  "Agriculture", "Forestry", "Fishing",
-  "Import & Export", "Trade", "Logistics", "Supply Chain",
-  "Government", "Municipal", "Sovereign",
-  "ETF", "ETP", "Mutual Fund", "Hedge Fund",
-  "Derivatives", "Options", "Futures", "Warrants",
-  "Crypto", "Digital Assets",
-  "Private Equity", "Venture Capital",
-  "Other",
+  { key: "sector", label: "Secteur", width: "160px" },
+  { key: "country", label: "Pays", width: "160px" },
+  { key: "countryId", label: "Code Pays", width: "90px" },
+  { key: "micCode", label: "MIC", width: "90px" },
+  { key: "currency", label: "Devise", width: "90px" },
+  { key: "currencyId", label: "Code Devise", width: "100px" },
+  { key: "source", label: "Source", width: "100px" },
+  { key: "description", label: "Description", width: "260px" },
 ];
 
 const PAGE_SIZE = 50;
+
+type SortKey = keyof FinancialAsset | "";
+
+interface SavedFileFilters {
+  searchQuery: string;
+  sectorFilter: string;
+  countryFilter: string;
+  showFavoritesOnly: boolean;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+}
 
 interface SavedFile {
   id: string;
   name: string;
   count: number;
   createdAt: string;
+  assetIds: string[];
+  filters: SavedFileFilters;
 }
+
+const isSortKey = (value: unknown): value is SortKey => {
+  if (value === "") return true;
+  return COLUMNS.some((col) => col.key === value);
+};
+
+const normalizeSavedFile = (raw: any): SavedFile => ({
+  id: typeof raw?.id === "string" ? raw.id : crypto.randomUUID(),
+  name: typeof raw?.name === "string" ? raw.name : `export_${new Date().toISOString().slice(0, 10)}.xlsx`,
+  count: typeof raw?.count === "number" ? raw.count : 0,
+  createdAt: typeof raw?.createdAt === "string" ? raw.createdAt : new Date().toISOString(),
+  assetIds: Array.isArray(raw?.assetIds) ? raw.assetIds.filter((id: unknown) => typeof id === "string") : [],
+  filters: {
+    searchQuery: typeof raw?.filters?.searchQuery === "string" ? raw.filters.searchQuery : "",
+    sectorFilter: normalizeSectorLabel(typeof raw?.filters?.sectorFilter === "string" ? raw.filters.sectorFilter : ""),
+    countryFilter: normalizeCountryLabel(typeof raw?.filters?.countryFilter === "string" ? raw.filters.countryFilter : ""),
+    showFavoritesOnly: Boolean(raw?.filters?.showFavoritesOnly),
+    sortKey: isSortKey(raw?.filters?.sortKey) ? raw.filters.sortKey : "",
+    sortDir: raw?.filters?.sortDir === "desc" ? "desc" : "asc",
+  },
+});
 
 const DataManager = () => {
   const { user } = useAuth();
@@ -90,15 +106,25 @@ const DataManager = () => {
   const [sectorFilter, setSectorFilter] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [sortKey, setSortKey] = useState<keyof FinancialAsset | "">("");
+  const [sortKey, setSortKey] = useState<SortKey>("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [editingCell, setEditingCell] = useState<{ row: number; col: keyof FinancialAsset } | null>(null);
   const [editValue, setEditValue] = useState("");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
+  const [activeSavedFileId, setActiveSavedFileId] = useState<string | null>(null);
   const [showFileManager, setShowFileManager] = useState(false);
+  const [enrichingFilters, setEnrichingFilters] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "disconnected">("disconnected");
   const editRef = useRef<HTMLInputElement>(null);
+
+  const persistSavedFiles = useCallback((files: SavedFile[]) => {
+    localStorage.setItem("enricher_saved_files", JSON.stringify(files));
+  }, []);
+
+  const clearSavedFileView = useCallback(() => {
+    setActiveSavedFileId(null);
+  }, []);
 
   // Load all assets from DB
   const fetchAssets = useCallback(async () => {
@@ -124,8 +150,20 @@ const DataManager = () => {
 
   useEffect(() => {
     fetchAssets();
-    const files = JSON.parse(localStorage.getItem("enricher_saved_files") || "[]");
-    setSavedFiles(files);
+
+    try {
+      const rawFiles = JSON.parse(localStorage.getItem("enricher_saved_files") || "[]");
+      if (Array.isArray(rawFiles)) {
+        const normalizedFiles = rawFiles.map(normalizeSavedFile);
+        setSavedFiles(normalizedFiles);
+        persistSavedFiles(normalizedFiles);
+      } else {
+        setSavedFiles([]);
+      }
+    } catch {
+      setSavedFiles([]);
+      localStorage.removeItem("enricher_saved_files");
+    }
 
     // Realtime subscription
     const channel = supabase
@@ -145,40 +183,72 @@ const DataManager = () => {
         setRealtimeStatus(status === "SUBSCRIBED" ? "connected" : "disconnected");
       });
 
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchAssets]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchAssets, persistSavedFiles]);
+
+  const sectorStats = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const asset of assets) {
+      const sector = normalizeSectorLabel(asset.sector);
+      if (!sector) continue;
+      counts.set(sector, (counts.get(sector) || 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [assets]);
+
+  const countryStats = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const asset of assets) {
+      const country = normalizeCountryLabel(asset.country, asset.countryId, asset.micCode);
+      if (!country || country === "Unknown") continue;
+      counts.set(country, (counts.get(country) || 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [assets]);
+
+  const sectors = useMemo(() => sectorStats.map(([name]) => name), [sectorStats]);
+  const countries = useMemo(() => countryStats.map(([name]) => name), [countryStats]);
+  const sectorEditorOptions = useMemo(
+    () => Array.from(new Set([...SECTOR_TAXONOMY, ...sectors])).sort((a, b) => a.localeCompare(b)),
+    [sectors],
+  );
 
   // Filters
-  const sectors = useMemo(() => {
-    const fromData = new Set(assets.map((a) => a.sector).filter(Boolean));
-    const all = new Set([...SECTOR_LIST, ...fromData]);
-    return Array.from(all).sort();
-  }, [assets]);
-
-  const countries = useMemo(() => {
-    const c = new Set(assets.map((a) => a.country).filter(Boolean));
-    return Array.from(c).sort();
-  }, [assets]);
-
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     let result = [...assets];
     if (showFavoritesOnly) {
       result = result.filter((a) => isFavorite(a.id));
     }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (a) =>
+      result = result.filter((a) => {
+        const country = normalizeCountryLabel(a.country, a.countryId, a.micCode).toLowerCase();
+        const sector = normalizeSectorLabel(a.sector).toLowerCase();
+        return (
           a.assetName.toLowerCase().includes(q) ||
           a.isin.toLowerCase().includes(q) ||
           a.ticker.toLowerCase().includes(q) ||
           a.symbol.toLowerCase().includes(q) ||
           a.ric.toLowerCase().includes(q) ||
-          a.country.toLowerCase().includes(q)
+          country.includes(q) ||
+          sector.includes(q)
+        );
+      });
+    }
+
+    if (sectorFilter) {
+      result = result.filter((a) => normalizeSectorLabel(a.sector) === sectorFilter);
+    }
+
+    if (countryFilter) {
+      result = result.filter(
+        (a) => normalizeCountryLabel(a.country, a.countryId, a.micCode) === countryFilter,
       );
     }
-    if (sectorFilter) result = result.filter((a) => a.sector === sectorFilter);
-    if (countryFilter) result = result.filter((a) => a.country === countryFilter);
+
     if (sortKey) {
       result.sort((a, b) => {
         const va = String(a[sortKey] || "").toLowerCase();
@@ -189,12 +259,41 @@ const DataManager = () => {
     return result;
   }, [assets, searchQuery, sectorFilter, countryFilter, sortKey, sortDir, showFavoritesOnly, isFavorite]);
 
+  const activeSavedFile = useMemo(
+    () => savedFiles.find((file) => file.id === activeSavedFileId) || null,
+    [savedFiles, activeSavedFileId],
+  );
+
+  const filtered = useMemo(() => {
+    if (!activeSavedFile) return baseFiltered;
+    if (activeSavedFile.assetIds.length === 0) return baseFiltered;
+
+    const snapshot = new Set(activeSavedFile.assetIds);
+    let result = assets.filter((asset) => snapshot.has(asset.id));
+    if (sortKey) {
+      result = [...result].sort((a, b) => {
+        const va = String(a[sortKey] || "").toLowerCase();
+        const vb = String(b[sortKey] || "").toLowerCase();
+        return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+    }
+    return result;
+  }, [activeSavedFile, assets, baseFiltered, sortKey, sortDir]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [activeSavedFileId]);
+
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pageAssets = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const handleSort = (key: keyof FinancialAsset) => {
+    clearSavedFileView();
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("asc"); }
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
     setPage(0);
   };
 
@@ -210,39 +309,61 @@ const DataManager = () => {
     const asset = pageAssets[editingCell.row];
     const col = editingCell.col;
     const keyMap: Record<string, string> = {
-      assetName: "asset_name", countryId: "country_id", micCode: "mic_code",
-      currencyId: "currency_id", createdAt: "created_at", updatedAt: "updated_at",
+      assetName: "asset_name",
+      countryId: "country_id",
+      micCode: "mic_code",
+      currencyId: "currency_id",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
     };
+
+    let valueToSave = editValue;
+    if (col === "country") {
+      valueToSave = normalizeCountryLabel(editValue, asset.countryId, asset.micCode);
+    }
+    if (col === "sector") {
+      valueToSave = normalizeSectorLabel(editValue);
+    }
+
     const dbCol = keyMap[col] || col;
 
     const { error } = await supabase
       .from("financial_assets")
-      .update({ [dbCol]: editValue })
+      .update({ [dbCol]: valueToSave })
       .eq("id", asset.id);
 
     if (error) {
       toast.error("Erreur de sauvegarde");
     } else {
       toast.success("Cellule mise à jour");
-      setAssets((prev) => prev.map((a) => (a.id === asset.id ? { ...a, [col]: editValue } : a)));
+      setAssets((prev) => prev.map((a) => (a.id === asset.id ? { ...a, [col]: valueToSave } : a)));
     }
     setEditingCell(null);
   };
 
-  const cancelEdit = () => { setEditingCell(null); setEditValue(""); };
+  const cancelEdit = () => {
+    setEditingCell(null);
+    setEditValue("");
+  };
 
   const deleteSelected = async () => {
     if (selectedRows.size === 0) return;
     const ids = Array.from(selectedRows);
     const { error } = await supabase.from("financial_assets").delete().in("id", ids);
     if (error) toast.error("Erreur de suppression");
-    else { toast.success(`${ids.length} actif(s) supprimé(s)`); setSelectedRows(new Set()); fetchAssets(); }
+    else {
+      toast.success(`${ids.length} actif(s) supprimé(s)`);
+      setSelectedRows(new Set());
+      fetchAssets();
+    }
   };
 
   const exportExcel = (filename = "enricher_data") => {
     const rows = filtered.map((a, i) => {
       const row: Record<string, string> = { "#": String(i + 1) };
-      COLUMNS.forEach((col) => { row[col.label] = String(a[col.key] || ""); });
+      COLUMNS.forEach((col) => {
+        row[col.label] = String(a[col.key] || "");
+      });
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -258,17 +379,66 @@ const DataManager = () => {
   };
 
   const saveAsFile = () => {
+    if (filtered.length === 0) {
+      toast.error("Aucune donnée à enregistrer");
+      return;
+    }
+
     const name = prompt("Nom du fichier:", `export_${new Date().toISOString().slice(0, 10)}`);
     if (!name) return;
+
     exportExcel(name);
-    const file: SavedFile = { id: crypto.randomUUID(), name: `${name}.xlsx`, count: filtered.length, createdAt: new Date().toISOString() };
+
+    const file: SavedFile = {
+      id: crypto.randomUUID(),
+      name: `${name}.xlsx`,
+      count: filtered.length,
+      createdAt: new Date().toISOString(),
+      assetIds: filtered.map((asset) => asset.id),
+      filters: {
+        searchQuery,
+        sectorFilter,
+        countryFilter,
+        showFavoritesOnly,
+        sortKey,
+        sortDir,
+      },
+    };
+
     const updated = [file, ...savedFiles];
     setSavedFiles(updated);
-    localStorage.setItem("enricher_saved_files", JSON.stringify(updated));
+    persistSavedFiles(updated);
+    toast.success(`Vue enregistrée: ${file.name}`);
+  };
+
+  const openSavedFile = (file: SavedFile) => {
+    if (file.assetIds.length > 0) {
+      setActiveSavedFileId(file.id);
+      setSelectedRows(new Set());
+      setPage(0);
+      toast.success(`Affichage de ${file.name}`);
+      return;
+    }
+
+    // Legacy fallback (anciennes versions de sauvegarde)
+    setActiveSavedFileId(null);
+    setSearchQuery(file.filters.searchQuery || "");
+    setSectorFilter(file.filters.sectorFilter || "");
+    setCountryFilter(file.filters.countryFilter || "");
+    setShowFavoritesOnly(file.filters.showFavoritesOnly || false);
+    setSortKey(file.filters.sortKey || "");
+    setSortDir(file.filters.sortDir || "asc");
+    setPage(0);
+    toast.success(`Filtres restaurés depuis ${file.name}`);
   };
 
   const toggleRow = (id: string) => {
-    setSelectedRows((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const selectAll = () => {
@@ -279,8 +449,126 @@ const DataManager = () => {
   const deleteSavedFile = (fileId: string) => {
     const updated = savedFiles.filter((f) => f.id !== fileId);
     setSavedFiles(updated);
-    localStorage.setItem("enricher_saved_files", JSON.stringify(updated));
+    persistSavedFiles(updated);
+    if (activeSavedFileId === fileId) setActiveSavedFileId(null);
     toast.success("Fichier supprimé");
+  };
+
+  const enrichByFilters = async () => {
+    if (!user?.id) {
+      toast.error("Session utilisateur requise");
+      return;
+    }
+
+    if (!countryFilter && !sectorFilter) {
+      toast.error("Sélectionnez au moins un pays ou un secteur");
+      return;
+    }
+
+    setEnrichingFilters(true);
+
+    try {
+      const pool: any[] = [];
+      const seen = new Set<string>();
+      const addUnique = (items: any[]) => {
+        for (const item of items) {
+          const key =
+            item.isin ||
+            item.acf ||
+            item.ric ||
+            `${item.ticker || ""}-${item.country_id || ""}-${item.mic_code || ""}-${item.asset_name || ""}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            pool.push(item);
+          }
+        }
+      };
+
+      if (countryFilter) {
+        const codes = getCountryCodes(countryFilter);
+        if (codes.length > 0) {
+          const { data: countryData, error: countryError } = await supabase.functions.invoke("openfigi-lookup", {
+            body: { exchCodes: codes },
+          });
+          if (!countryError && countryData?.assets) {
+            addUnique(countryData.assets);
+          }
+        }
+      }
+
+      const searchQueryText = [sectorFilter, countryFilter].filter(Boolean).join(" ").trim();
+      if (searchQueryText) {
+        const { data: textData, error: textError } = await supabase.functions.invoke("openfigi-lookup", {
+          body: { searchQuery: searchQueryText, limit: 300 },
+        });
+        if (!textError && textData?.assets) {
+          addUnique(textData.assets);
+        }
+      }
+
+      if (pool.length === 0) {
+        toast.error("Aucune donnée externe trouvée pour ces filtres");
+        return;
+      }
+
+      const selectedCountry = countryFilter ? normalizeCountryLabel(countryFilter) : "";
+      const selectedSector = sectorFilter ? normalizeSectorLabel(sectorFilter) : "";
+
+      const matching = pool.filter((item) => {
+        const country = normalizeCountryLabel(item.country, item.country_id, item.mic_code);
+        const sector = normalizeSectorLabel(item.sector);
+        const okCountry = !selectedCountry || country === selectedCountry;
+        const okSector = !selectedSector || sector === selectedSector;
+        return okCountry && okSector;
+      });
+
+      if (matching.length === 0) {
+        toast.error("Aucun actif ne correspond exactement au pays/secteur sélectionné");
+        return;
+      }
+
+      const now = Date.now();
+      const rows = matching.map((item, index) => ({
+        asset_name: item.asset_name || item.ticker || "Unknown",
+        isin:
+          item.isin && String(item.isin).trim().length > 0
+            ? item.isin
+            : `NOISIN-${(item.ticker || item.asset_name || "ASSET").toString().replace(/\s+/g, "").toUpperCase()}-${now}-${index}`,
+        sector: normalizeSectorLabel(item.sector),
+        acf: item.acf || "",
+        ric: item.ric || "",
+        ticker: item.ticker || "",
+        symbol: item.symbol || item.ticker || "",
+        country_id: (item.country_id || "").toString().toUpperCase(),
+        country: normalizeCountryLabel(item.country, item.country_id, item.mic_code),
+        mic_code: item.mic_code || "",
+        currency_id: (item.currency_id || "").toString().toUpperCase(),
+        currency: item.currency || item.currency_id || "",
+        description: item.description || "",
+        source: "openfigi",
+        user_id: user.id,
+      }));
+
+      for (let i = 0; i < rows.length; i += 50) {
+        const chunk = rows.slice(i, i + 50);
+        const { error } = await supabase
+          .from("financial_assets")
+          .upsert(chunk, { onConflict: "isin", ignoreDuplicates: true });
+
+        if (error) {
+          console.warn("Erreur upsert enrichissement:", error);
+        }
+      }
+
+      await fetchAssets();
+      clearSavedFileView();
+      toast.success(`${rows.length} actif(s) enrichis pour le filtre sélectionné`);
+    } catch (error) {
+      console.error("Erreur enrichissement filtres:", error);
+      toast.error("Impossible d'enrichir les données pour ce filtre");
+    } finally {
+      setEnrichingFilters(false);
+    }
   };
 
   return (
@@ -298,7 +586,11 @@ const DataManager = () => {
           </Badge>
           {/* Realtime indicator */}
           <div className="flex items-center gap-1">
-            <div className={`w-2 h-2 rounded-full ${realtimeStatus === "connected" ? "bg-[hsl(var(--success))] animate-pulse" : "bg-destructive"}`} />
+            <div
+              className={`w-2 h-2 rounded-full ${
+                realtimeStatus === "connected" ? "bg-[hsl(var(--success))] animate-pulse" : "bg-destructive"
+              }`}
+            />
             <span className="font-mono text-[9px] text-muted-foreground">
               {realtimeStatus === "connected" ? "LIVE" : "OFFLINE"}
             </span>
@@ -320,7 +612,11 @@ const DataManager = () => {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
+              onChange={(e) => {
+                clearSavedFileView();
+                setSearchQuery(e.target.value);
+                setPage(0);
+              }}
               placeholder="Rechercher..."
               className="w-full h-8 pl-9 pr-3 bg-background border border-input rounded-lg font-mono text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
             />
@@ -330,26 +626,46 @@ const DataManager = () => {
             <Filter className="w-3 h-3 text-muted-foreground" />
             <select
               value={sectorFilter}
-              onChange={(e) => { setSectorFilter(e.target.value); setPage(0); }}
+              onChange={(e) => {
+                clearSavedFileView();
+                setSectorFilter(e.target.value);
+                setPage(0);
+              }}
               className="h-8 px-2 bg-background border border-input rounded-lg font-mono text-[10px] text-foreground focus:outline-none focus:border-primary"
             >
               <option value="">Tous secteurs</option>
-              {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+              {sectorStats.map(([sector, count]) => (
+                <option key={sector} value={sector}>
+                  {sector} ({count})
+                </option>
+              ))}
             </select>
           </div>
 
           <select
             value={countryFilter}
-            onChange={(e) => { setCountryFilter(e.target.value); setPage(0); }}
+            onChange={(e) => {
+              clearSavedFileView();
+              setCountryFilter(e.target.value);
+              setPage(0);
+            }}
             className="h-8 px-2 bg-background border border-input rounded-lg font-mono text-[10px] text-foreground focus:outline-none focus:border-primary"
           >
             <option value="">Tous pays</option>
-            {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+            {countryStats.map(([country, count]) => (
+              <option key={country} value={country}>
+                {country} ({count})
+              </option>
+            ))}
           </select>
 
           {/* Favorites toggle */}
           <button
-            onClick={() => { setShowFavoritesOnly(!showFavoritesOnly); setPage(0); }}
+            onClick={() => {
+              clearSavedFileView();
+              setShowFavoritesOnly(!showFavoritesOnly);
+              setPage(0);
+            }}
             className={`flex items-center gap-1 px-2.5 h-8 rounded-lg font-mono text-[10px] border transition-colors ${
               showFavoritesOnly
                 ? "bg-[hsl(var(--warning))]/20 text-[hsl(var(--warning))] border-[hsl(var(--warning))]/30"
@@ -369,6 +685,16 @@ const DataManager = () => {
             <RefreshCw className="w-3 h-3" /> ACTUALISER
           </button>
 
+          {(sectorFilter || countryFilter) && filtered.length === 0 && (
+            <button
+              onClick={enrichByFilters}
+              disabled={enrichingFilters}
+              className="flex items-center gap-1 px-2.5 h-8 rounded-lg bg-primary/10 text-primary font-mono text-[10px] border border-primary/20 hover:bg-primary/20 transition-colors disabled:opacity-50"
+            >
+              {enrichingFilters ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />} CREUSER LES DONNÉES
+            </button>
+          )}
+
           {selectedRows.size > 0 && (
             <button
               onClick={deleteSelected}
@@ -380,10 +706,22 @@ const DataManager = () => {
 
           <div className="flex-1" />
 
+          {activeSavedFile && (
+            <button
+              onClick={clearSavedFileView}
+              className="flex items-center gap-1 px-2.5 h-8 rounded-lg bg-accent text-accent-foreground font-mono text-[10px] border border-border hover:border-primary/30 transition-colors"
+              title="Revenir aux données live"
+            >
+              <Wifi className="w-3 h-3" /> VUE LIVE
+            </button>
+          )}
+
           <button
             onClick={() => setShowFileManager(!showFileManager)}
             className={`flex items-center gap-1 px-2.5 h-8 rounded-lg font-mono text-[10px] border transition-colors ${
-              showFileManager ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-secondary-foreground border-border hover:border-primary/30"
+              showFileManager
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-secondary text-secondary-foreground border-border hover:border-primary/30"
             }`}
           >
             <FolderOpen className="w-3 h-3" /> FICHIERS ({savedFiles.length})
@@ -411,7 +749,7 @@ const DataManager = () => {
           {showFileManager && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 280, opacity: 1 }}
+              animate={{ width: 300, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               className="border-r border-border bg-card overflow-y-auto flex-shrink-0"
             >
@@ -420,25 +758,42 @@ const DataManager = () => {
                   Gestionnaire de fichiers
                 </h3>
                 {savedFiles.length === 0 ? (
-                  <p className="text-muted-foreground text-xs text-center py-8">
-                    Aucun fichier enregistré.
-                  </p>
+                  <p className="text-muted-foreground text-xs text-center py-8">Aucun fichier enregistré.</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {savedFiles.map((file) => (
-                      <div key={file.id} className="group flex items-center gap-2 p-2 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/50 transition-colors">
-                        <FileText className="w-4 h-4 text-primary flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-mono text-[11px] text-foreground truncate">{file.name}</p>
-                          <p className="font-mono text-[9px] text-muted-foreground">
-                            {file.count} actifs · {new Date(file.createdAt).toLocaleDateString("fr-FR")}
-                          </p>
-                        </div>
-                        <button onClick={() => deleteSavedFile(file.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 transition-all">
-                          <Trash2 className="w-3 h-3 text-destructive" />
+                    {savedFiles.map((file) => {
+                      const isActive = activeSavedFileId === file.id;
+                      return (
+                        <button
+                          key={file.id}
+                          onClick={() => openSavedFile(file)}
+                          className={`w-full group flex items-center gap-2 p-2 rounded-lg border text-left transition-colors ${
+                            isActive
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/30 hover:bg-muted/50"
+                          }`}
+                        >
+                          <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-mono text-[11px] text-foreground truncate">{file.name}</p>
+                            <p className="font-mono text-[9px] text-muted-foreground">
+                              {file.count} actifs · {new Date(file.createdAt).toLocaleDateString("fr-FR")}
+                            </p>
+                          </div>
+                          <Eye className={`w-3.5 h-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteSavedFile(file.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 transition-all"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-3 h-3 text-destructive" />
+                          </button>
                         </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -454,141 +809,171 @@ const DataManager = () => {
             </div>
           ) : (
             <>
-              <div className="flex-1 overflow-auto">
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10 bg-muted">
-                    <tr>
-                      <th className="w-10 px-2 py-2 border-b border-r border-border text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.size === pageAssets.length && pageAssets.length > 0}
-                          onChange={selectAll}
-                          className="w-3.5 h-3.5 rounded border-input accent-primary"
-                        />
-                      </th>
-                      <th className="w-8 px-1 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground text-center">
-                        <Star className="w-3 h-3 mx-auto text-muted-foreground" />
-                      </th>
-                      <th className="w-10 px-2 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground">#</th>
-                      {COLUMNS.map((col) => (
-                        <th
-                          key={col.key}
-                          className="px-2 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground cursor-pointer select-none hover:text-primary hover:bg-primary/5 transition-colors whitespace-nowrap text-left"
-                          style={{ minWidth: col.width }}
-                          onClick={() => handleSort(col.key)}
-                        >
-                          <span className="flex items-center gap-1">
-                            {col.label}
-                            {sortKey === col.key && (
-                              <span className="text-primary text-[9px]">{sortDir === "asc" ? "▲" : "▼"}</span>
-                            )}
-                          </span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageAssets.map((asset, rowIdx) => (
-                      <tr
-                        key={asset.id}
-                        className={`group transition-colors ${
-                          selectedRows.has(asset.id) ? "bg-primary/5" : "hover:bg-muted/30"
-                        }`}
+              {filtered.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center px-6">
+                  <div className="text-center space-y-3 max-w-md">
+                    <p className="font-mono text-xs text-foreground">Aucun résultat pour ce filtre.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Sélectionnez un pays/secteur existant ou lancez "CREUSER LES DONNÉES" pour enrichir automatiquement.
+                    </p>
+                    {(sectorFilter || countryFilter) && (
+                      <button
+                        onClick={enrichByFilters}
+                        disabled={enrichingFilters}
+                        className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg bg-primary text-primary-foreground font-mono text-[10px] hover:bg-primary/90 transition-colors disabled:opacity-50"
                       >
-                        <td className="px-2 py-1 border-b border-r border-border/50 text-center">
+                        {enrichingFilters ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                        CREUSER LES DONNÉES
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-auto">
+                  <table className="w-full border-collapse">
+                    <thead className="sticky top-0 z-10 bg-muted">
+                      <tr>
+                        <th className="w-10 px-2 py-2 border-b border-r border-border text-center">
                           <input
                             type="checkbox"
-                            checked={selectedRows.has(asset.id)}
-                            onChange={() => toggleRow(asset.id)}
+                            checked={selectedRows.size === pageAssets.length && pageAssets.length > 0}
+                            onChange={selectAll}
                             className="w-3.5 h-3.5 rounded border-input accent-primary"
                           />
-                        </td>
-                        <td className="px-1 py-1 border-b border-r border-border/50 text-center">
-                          <button
-                            onClick={() => toggleFavorite(asset.id)}
-                            className="p-0.5 rounded hover:bg-[hsl(var(--warning))]/10 transition-colors"
+                        </th>
+                        <th className="w-8 px-1 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground text-center">
+                          <Star className="w-3 h-3 mx-auto text-muted-foreground" />
+                        </th>
+                        <th className="w-10 px-2 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground">
+                          #
+                        </th>
+                        {COLUMNS.map((col) => (
+                          <th
+                            key={col.key}
+                            className="px-2 py-2 border-b border-r border-border font-mono text-[10px] text-muted-foreground cursor-pointer select-none hover:text-primary hover:bg-primary/5 transition-colors whitespace-nowrap text-left"
+                            style={{ minWidth: col.width }}
+                            onClick={() => handleSort(col.key)}
                           >
-                            <Star
-                              className={`w-3.5 h-3.5 transition-colors ${
-                                isFavorite(asset.id)
-                                  ? "text-[hsl(var(--warning))] fill-[hsl(var(--warning))]"
-                                  : "text-muted-foreground/30 hover:text-[hsl(var(--warning))]/50"
-                              }`}
-                            />
-                          </button>
-                        </td>
-                        <td className="px-2 py-1 border-b border-r border-border/50 font-mono text-[10px] text-muted-foreground text-center">
-                          {page * PAGE_SIZE + rowIdx + 1}
-                        </td>
-                        {COLUMNS.map((col) => {
-                          const isEditing = editingCell?.row === rowIdx && editingCell?.col === col.key;
-                          return (
-                            <td
-                              key={col.key}
-                              className="px-1 py-0.5 border-b border-r border-border/50 font-mono text-[11px] text-foreground"
-                              style={{ minWidth: col.width }}
-                              onDoubleClick={() => startEdit(rowIdx, col.key)}
-                            >
-                              {isEditing ? (
-                                <div className="flex items-center gap-0.5">
-                                  {col.key === "sector" ? (
-                                    <select
-                                      ref={editRef as any}
-                                      value={editValue}
-                                      onChange={(e) => { setEditValue(e.target.value); }}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") saveEdit();
-                                        if (e.key === "Escape") cancelEdit();
-                                      }}
-                                      onBlur={() => saveEdit()}
-                                      className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
-                                      autoFocus
-                                    >
-                                      <option value="">— Aucun —</option>
-                                      {SECTOR_LIST.map((s) => (
-                                        <option key={s} value={s}>{s}</option>
-                                      ))}
-                                      {editValue && !SECTOR_LIST.includes(editValue) && (
-                                        <option value={editValue}>{editValue}</option>
-                                      )}
-                                    </select>
-                                  ) : (
-                                    <input
-                                      ref={editRef}
-                                      value={editValue}
-                                      onChange={(e) => setEditValue(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") saveEdit();
-                                        if (e.key === "Escape") cancelEdit();
-                                      }}
-                                      className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
-                                    />
-                                  )}
-                                  <button onClick={saveEdit} className="p-0.5 text-primary hover:bg-primary/10 rounded">
-                                    <Check className="w-3 h-3" />
-                                  </button>
-                                  <button onClick={cancelEdit} className="p-0.5 text-destructive hover:bg-destructive/10 rounded">
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <span
-                                  className={`block truncate px-1 py-0.5 rounded cursor-default group-hover:cursor-text ${
-                                    col.key === "description" ? "max-w-[250px]" : ""
-                                  }`}
-                                  title={String(asset[col.key] || "")}
-                                >
-                                  {asset[col.key] || "—"}
-                                </span>
+                            <span className="flex items-center gap-1">
+                              {col.label}
+                              {sortKey === col.key && (
+                                <span className="text-primary text-[9px]">{sortDir === "asc" ? "▲" : "▼"}</span>
                               )}
-                            </td>
-                          );
-                        })}
+                            </span>
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {pageAssets.map((asset, rowIdx) => (
+                        <tr
+                          key={asset.id}
+                          className={`group transition-colors ${
+                            selectedRows.has(asset.id) ? "bg-primary/5" : "hover:bg-muted/30"
+                          }`}
+                        >
+                          <td className="px-2 py-1 border-b border-r border-border/50 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedRows.has(asset.id)}
+                              onChange={() => toggleRow(asset.id)}
+                              className="w-3.5 h-3.5 rounded border-input accent-primary"
+                            />
+                          </td>
+                          <td className="px-1 py-1 border-b border-r border-border/50 text-center">
+                            <button
+                              onClick={() => toggleFavorite(asset.id)}
+                              className="p-0.5 rounded hover:bg-[hsl(var(--warning))]/10 transition-colors"
+                            >
+                              <Star
+                                className={`w-3.5 h-3.5 transition-colors ${
+                                  isFavorite(asset.id)
+                                    ? "text-[hsl(var(--warning))] fill-[hsl(var(--warning))]"
+                                    : "text-muted-foreground/30 hover:text-[hsl(var(--warning))]/50"
+                                }`}
+                              />
+                            </button>
+                          </td>
+                          <td className="px-2 py-1 border-b border-r border-border/50 font-mono text-[10px] text-muted-foreground text-center">
+                            {page * PAGE_SIZE + rowIdx + 1}
+                          </td>
+                          {COLUMNS.map((col) => {
+                            const isEditing = editingCell?.row === rowIdx && editingCell?.col === col.key;
+                            return (
+                              <td
+                                key={col.key}
+                                className="px-1 py-0.5 border-b border-r border-border/50 font-mono text-[11px] text-foreground"
+                                style={{ minWidth: col.width }}
+                                onDoubleClick={() => startEdit(rowIdx, col.key)}
+                              >
+                                {isEditing ? (
+                                  <div className="flex items-center gap-0.5">
+                                    {col.key === "sector" ? (
+                                      <select
+                                        ref={editRef as any}
+                                        value={editValue}
+                                        onChange={(e) => {
+                                          setEditValue(e.target.value);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") saveEdit();
+                                          if (e.key === "Escape") cancelEdit();
+                                        }}
+                                        onBlur={() => saveEdit()}
+                                        className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
+                                        autoFocus
+                                      >
+                                        <option value="">— Aucun —</option>
+                                        {sectorEditorOptions.map((s) => (
+                                          <option key={s} value={s}>
+                                            {s}
+                                          </option>
+                                        ))}
+                                        {editValue && !sectorEditorOptions.includes(editValue) && (
+                                          <option value={editValue}>{editValue}</option>
+                                        )}
+                                      </select>
+                                    ) : (
+                                      <input
+                                        ref={editRef}
+                                        value={editValue}
+                                        onChange={(e) => setEditValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") saveEdit();
+                                          if (e.key === "Escape") cancelEdit();
+                                        }}
+                                        className="w-full h-6 px-1 bg-primary/5 border border-primary rounded text-[11px] font-mono focus:outline-none"
+                                      />
+                                    )}
+                                    <button onClick={saveEdit} className="p-0.5 text-primary hover:bg-primary/10 rounded">
+                                      <Check className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={cancelEdit}
+                                      className="p-0.5 text-destructive hover:bg-destructive/10 rounded"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span
+                                    className={`block truncate px-1 py-0.5 rounded cursor-default group-hover:cursor-text ${
+                                      col.key === "description" ? "max-w-[250px]" : ""
+                                    }`}
+                                    title={String(asset[col.key] || "")}
+                                  >
+                                    {asset[col.key] || "—"}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {/* Footer */}
               <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-card gap-2 flex-wrap">
@@ -596,12 +981,16 @@ const DataManager = () => {
                   <p className="font-mono text-[10px] text-muted-foreground">
                     {filtered.length} actif{filtered.length > 1 ? "s" : ""}
                     {(sectorFilter || countryFilter || searchQuery || showFavoritesOnly) && " (filtré)"}
+                    {activeSavedFile && " (vue enregistrée)"}
                   </p>
                   <p className="font-mono text-[10px] text-muted-foreground">
                     Page {page + 1}/{totalPages || 1}
                   </p>
                   {selectedRows.size > 0 && (
-                    <Badge variant="outline" className="text-[9px] font-mono bg-primary/5 text-primary border-primary/20">
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] font-mono bg-primary/5 text-primary border-primary/20"
+                    >
                       {selectedRows.size} sélectionné(s)
                     </Badge>
                   )}
@@ -626,7 +1015,9 @@ const DataManager = () => {
                           key={pageNum}
                           onClick={() => setPage(pageNum)}
                           className={`w-6 h-6 rounded font-mono text-[10px] transition-colors ${
-                            pageNum === page ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                            pageNum === page
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:bg-muted"
                           }`}
                         >
                           {pageNum + 1}
