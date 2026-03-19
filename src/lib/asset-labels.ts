@@ -49,6 +49,11 @@ const EXCHANGE_TO_ISO: Record<string, string> = {
   TW: "TW",
   MM: "MX",
   MX: "MX",
+  AJ: "ZA",
+  XA: "ZA",
+  XH: "ZA",
+  LONDON: "GB",
+  CME: "US",
 };
 
 const COUNTRY_ALIASES: Record<string, string> = {
@@ -88,6 +93,11 @@ const SECTOR_ALIASES: Record<string, string> = {
   "OIL & GAS": "Oil and Gas",
   "OIL AND GAS": "Oil and Gas",
   "FIXED INCOME": "Fixed Income",
+  CURNCY: "Currency",
+  "M MKT": "Money Market",
+  CORP: "Corporate Debt",
+  "EURO CP": "Commercial Paper",
+  "EURO MTN": "Medium-Term Note",
 };
 
 export const SECTOR_TAXONOMY = [
@@ -157,6 +167,7 @@ export const SECTOR_TAXONOMY = [
 ] as const;
 
 const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+const ISO_ALPHA2_REGEX = /^[A-Z]{2}$/;
 
 const normalizeToken = (value: string) =>
   value
@@ -170,6 +181,17 @@ const toLabelCase = (value: string) =>
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase())
     .replace(/\bAnd\b/g, "and");
+
+const safeRegionLabel = (regionCode: string): string | null => {
+  const code = regionCode.trim().toUpperCase();
+  if (!ISO_ALPHA2_REGEX.test(code)) return null;
+
+  try {
+    return regionNames.of(code) || null;
+  } catch {
+    return null;
+  }
+};
 
 export function normalizeCountryLabel(
   country?: string | null,
@@ -186,24 +208,26 @@ export function normalizeCountryLabel(
       return COUNTRY_ALIASES[token];
     }
 
-    const maybeIsoFromCountry = EXCHANGE_TO_ISO[token] || (token.length === 2 ? token : "");
-    if (maybeIsoFromCountry) {
-      const label = regionNames.of(maybeIsoFromCountry);
-      if (label) {
-        return label;
-      }
+    const maybeIsoFromCountry = EXCHANGE_TO_ISO[token] || (ISO_ALPHA2_REGEX.test(token) ? token : "");
+    const labelFromCountry = maybeIsoFromCountry ? safeRegionLabel(maybeIsoFromCountry) : null;
+    if (labelFromCountry) {
+      return labelFromCountry;
     }
 
     if (token.length > 2) {
-      return toLabelCase(rawCountry);
+      return /^[A-Z0-9]{2,6}$/.test(token) ? rawCountry : toLabelCase(rawCountry);
     }
   }
 
   if (rawCountryId) {
     const iso = EXCHANGE_TO_ISO[rawCountryId] || rawCountryId;
-    const label = regionNames.of(iso);
-    if (label) {
-      return label;
+    const labelFromCountryId = safeRegionLabel(iso);
+    if (labelFromCountryId) {
+      return labelFromCountryId;
+    }
+
+    if (rawCountryId.length > 2) {
+      return rawCountryId;
     }
   }
 
