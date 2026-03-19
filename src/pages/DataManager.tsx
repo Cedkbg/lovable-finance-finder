@@ -121,6 +121,8 @@ const DataManager = () => {
   const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "disconnected">("disconnected");
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [showCountryZones, setShowCountryZones] = useState(false);
+  const [expandedZone, setExpandedZone] = useState<string | null>(null);
   const editRef = useRef<HTMLInputElement>(null);
 
   const persistSavedFiles = useCallback((files: SavedFile[]) => {
