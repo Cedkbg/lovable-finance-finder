@@ -6,6 +6,7 @@ import { useFavorites } from "@/hooks/use-favorites";
 import { dbToFinancialAsset, type DbAsset } from "@/lib/asset-service";
 import { getCountryCodes } from "@/lib/country-codes";
 import { normalizeCountryLabel, normalizeSectorLabel, SECTOR_TAXONOMY } from "@/lib/asset-labels";
+import { COUNTRY_ZONES } from "@/lib/country-zones";
 import type { FinancialAsset } from "@/lib/mock-data";
 import ThemeToggle from "@/components/ThemeToggle";
 import { toast } from "sonner";
@@ -33,6 +34,8 @@ import {
   Zap,
   Wifi,
   Eye,
+  ChevronDown,
+  Globe,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -118,6 +121,8 @@ const DataManager = () => {
   const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "disconnected">("disconnected");
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [showCountryZones, setShowCountryZones] = useState(false);
+  const [expandedZone, setExpandedZone] = useState<string | null>(null);
   const editRef = useRef<HTMLInputElement>(null);
 
   const persistSavedFiles = useCallback((files: SavedFile[]) => {
@@ -712,22 +717,115 @@ const DataManager = () => {
             </select>
           </div>
 
-          <select
-            value={countryFilter}
-            onChange={(e) => {
-              clearSavedFileView();
-              setCountryFilter(e.target.value);
-              setPage(0);
-            }}
-            className="h-8 px-2 bg-background border border-input rounded-lg font-mono text-[10px] text-foreground focus:outline-none focus:border-primary"
-          >
-            <option value="">Tous pays</option>
-            {countryStats.map(([country, count]) => (
-              <option key={country} value={country}>
-                {country} ({count})
-              </option>
-            ))}
-          </select>
+          {/* Country zone dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowCountryZones(!showCountryZones)}
+              className="flex items-center gap-1 h-8 px-2 bg-background border border-input rounded-lg font-mono text-[10px] text-foreground hover:border-primary/30 transition-colors min-w-[120px]"
+            >
+              <Globe className="w-3 h-3 text-muted-foreground" />
+              <span className="truncate max-w-[100px]">{countryFilter || "Tous pays"}</span>
+              <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${showCountryZones ? "rotate-180" : ""}`} />
+            </button>
+            {showCountryZones && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => { setShowCountryZones(false); setExpandedZone(null); }} />
+                <div className="absolute top-full left-0 mt-1 w-64 max-h-72 overflow-y-auto z-50 rounded-lg border border-border bg-popover shadow-lg">
+                  {/* Option "Tous pays" */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearSavedFileView();
+                      setCountryFilter("");
+                      setPage(0);
+                      setShowCountryZones(false);
+                      setExpandedZone(null);
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-xs font-mono text-foreground hover:bg-accent hover:text-accent-foreground transition-colors border-b border-border"
+                  >
+                    🌐 Tous les pays
+                  </button>
+                  {/* Pays déjà en base */}
+                  {countryStats.length > 0 && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedZone(expandedZone === "_db" ? null : "_db")}
+                        className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-foreground bg-muted/50 hover:bg-muted transition-colors sticky top-0"
+                      >
+                        <span>📊 En base ({assets.length} actifs)</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform ${expandedZone === "_db" ? "rotate-180" : ""}`} />
+                      </button>
+                      {expandedZone === "_db" && (
+                        <div className="py-1 max-h-40 overflow-y-auto">
+                          {countryStats.map(([country, count]) => (
+                            <button
+                              key={country}
+                              type="button"
+                              onClick={() => {
+                                clearSavedFileView();
+                                setCountryFilter(country);
+                                setPage(0);
+                                setShowCountryZones(false);
+                                setExpandedZone(null);
+                              }}
+                              className={`w-full text-left px-4 py-1 text-[10px] font-mono transition-colors ${
+                                countryFilter === country
+                                  ? "bg-primary/10 text-primary"
+                                  : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                              }`}
+                            >
+                              {country} <span className="text-muted-foreground">({count})</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Zones géographiques */}
+                  {COUNTRY_ZONES.map((zone) => (
+                    <div key={zone.zone}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedZone(expandedZone === zone.zone ? null : zone.zone)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-foreground bg-muted/50 hover:bg-muted transition-colors sticky top-0"
+                      >
+                        <span>{zone.emoji} {zone.zone}</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform ${expandedZone === zone.zone ? "rotate-180" : ""}`} />
+                      </button>
+                      {expandedZone === zone.zone && (
+                        <div className="py-1">
+                          {zone.countries.map((c, i) =>
+                            c.query === "" ? (
+                              <div key={i} className="px-3 py-1 text-[9px] text-muted-foreground font-mono select-none">
+                                {c.label}
+                              </div>
+                            ) : (
+                              <button
+                                key={c.query}
+                                type="button"
+                                onClick={() => {
+                                  clearSavedFileView();
+                                  setCountryFilter(c.label);
+                                  setPage(0);
+                                  setShowCountryZones(false);
+                                  setExpandedZone(null);
+                                }}
+                                className="w-full text-left px-4 py-1 text-[10px] font-mono text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                              >
+                                {c.label}
+                              </button>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Favorites toggle */}
           <button
