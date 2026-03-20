@@ -745,11 +745,20 @@ const DataManager = () => {
               className="h-8 px-2 bg-background border border-input rounded-lg font-mono text-[10px] text-foreground focus:outline-none focus:border-primary"
             >
               <option value="">Tous secteurs</option>
-              {sectorStats.map(([sector, count]) => (
-                <option key={sector} value={sector}>
-                  {sector} ({count})
-                </option>
-              ))}
+              <optgroup label="── En base ──">
+                {sectorStats.map(([sector, count]) => (
+                  <option key={`db-${sector}`} value={sector}>
+                    {sector} ({count})
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="── Tous secteurs ──">
+                {SECTOR_TAXONOMY.filter(s => !sectorStats.some(([name]) => name === s)).map((sector) => (
+                  <option key={`tax-${sector}`} value={sector}>
+                    {sector}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
 
