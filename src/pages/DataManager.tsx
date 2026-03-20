@@ -898,7 +898,7 @@ const DataManager = () => {
             <RefreshCw className="w-3 h-3" /> ACTUALISER
           </button>
 
-          {(sectorFilter || countryFilter) && filtered.length === 0 && (
+          {(sectorFilter || countryFilter) && (
             <button
               onClick={enrichByFilters}
               disabled={enrichingFilters}
