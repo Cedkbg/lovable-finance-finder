@@ -559,6 +559,7 @@ const DataManager = () => {
         }
       };
 
+      // Source 1: OpenFIGI (equities, bonds, etc.)
       if (countryFilter) {
         const codes = getCountryCodes(countryFilter);
         if (codes.length > 0) {
@@ -581,6 +582,37 @@ const DataManager = () => {
         }
       }
 
+      // Source 2: CoinGecko (crypto / digital assets)
+      const sectorLower = (sectorFilter || "").toLowerCase();
+      const isCryptoSector = sectorLower.includes("crypto") || sectorLower.includes("digital");
+      if (isCryptoSector || (!sectorFilter && !countryFilter)) {
+        try {
+          const { data: cryptoData, error: cryptoError } = await supabase.functions.invoke("multi-source-lookup", {
+            body: { source: "coingecko", query: countryFilter || "", limit: 100 },
+          });
+          if (!cryptoError && cryptoData?.assets) {
+            addUnique(cryptoData.assets);
+          }
+        } catch (e) {
+          console.warn("CoinGecko enrichment failed:", e);
+        }
+      }
+
+      // Source 3: Exchange Rates API (currencies / forex)
+      const isCurrencySector = sectorLower.includes("devis") || sectorLower.includes("currency") || sectorLower.includes("forex");
+      if (isCurrencySector || (!sectorFilter && countryFilter)) {
+        try {
+          const { data: forexData, error: forexError } = await supabase.functions.invoke("multi-source-lookup", {
+            body: { source: "exchangerates", country: countryFilter || "" },
+          });
+          if (!forexError && forexData?.assets) {
+            addUnique(forexData.assets);
+          }
+        } catch (e) {
+          console.warn("Exchange rates enrichment failed:", e);
+        }
+      }
+
       if (pool.length === 0) {
         toast.error("Aucune donnée externe trouvée pour ces filtres");
         return;
@@ -597,13 +629,16 @@ const DataManager = () => {
         return okCountry && okSector;
       });
 
-      if (matching.length === 0) {
+      // For crypto/forex, relax country filter since they're global
+      const finalMatching = matching.length > 0 ? matching : (isCryptoSector || isCurrencySector) ? pool : [];
+
+      if (finalMatching.length === 0) {
         toast.error("Aucun actif ne correspond exactement au pays/secteur sélectionné");
         return;
       }
 
       const now = Date.now();
-      const rows = matching.map((item, index) => ({
+      const rows = finalMatching.map((item, index) => ({
         asset_name: item.asset_name || item.ticker || "Unknown",
         isin:
           item.isin && String(item.isin).trim().length > 0
@@ -620,7 +655,7 @@ const DataManager = () => {
         currency_id: (item.currency_id || "").toString().toUpperCase(),
         currency: item.currency || item.currency_id || "",
         description: item.description || "",
-        source: "openfigi",
+        source: item.source || "openfigi",
         user_id: user.id,
       }));
 
@@ -637,7 +672,8 @@ const DataManager = () => {
 
       await fetchAssets();
       clearSavedFileView();
-      toast.success(`${rows.length} actif(s) enrichis pour le filtre sélectionné`);
+      const sources = [...new Set(finalMatching.map(i => i.source || "openfigi"))].join(", ");
+      toast.success(`${rows.length} actif(s) enrichis (sources: ${sources})`);
     } catch (error) {
       console.error("Erreur enrichissement filtres:", error);
       toast.error("Impossible d'enrichir les données pour ce filtre");
