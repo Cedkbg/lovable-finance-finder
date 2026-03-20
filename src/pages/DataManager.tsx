@@ -529,6 +529,44 @@ const DataManager = () => {
     return { topCountries, topSectors, liveCount: matchedAssets.length };
   };
 
+  // Sector compatibility: OpenFIGI uses "Equity","Corp","Govt" etc, not "Finance","Banking"
+  // Map user-selected sectors to OpenFIGI-compatible terms + accept related sectors
+  const SECTOR_SEARCH_KEYWORDS: Record<string, string[]> = {
+    Finance: ["Finance", "Financial", "Bank", "Insurance", "Asset Management"],
+    Banking: ["Bank", "Banking", "Financial"],
+    Insurance: ["Insurance", "Assurance"],
+    "Asset Management": ["Asset Management", "Fund", "Investment"],
+    Technology: ["Technology", "Tech", "Software"],
+    "Information Technology": ["Information Technology", "Tech"],
+    Healthcare: ["Healthcare", "Pharma", "Biotech"],
+    Energy: ["Energy", "Oil", "Gas", "Petroleum"],
+    "Real Estate": ["Real Estate", "REIT", "Property"],
+    Mining: ["Mining", "Metals", "Gold"],
+    Telecommunications: ["Telecom", "Telecommunications"],
+    "Consumer Goods": ["Consumer", "Retail", "FMCG"],
+    Industrials: ["Industrial", "Manufacturing"],
+    Agriculture: ["Agriculture", "Agri", "Farm"],
+    Construction: ["Construction", "Building"],
+    Transportation: ["Transport", "Logistics", "Shipping"],
+  };
+
+  // OpenFIGI marketSector values that are compatible with our taxonomy
+  const OPENFIGI_SECTOR_COMPAT: Record<string, string[]> = {
+    Finance: ["Equity", "Corp", "Pfd"],
+    Banking: ["Equity", "Corp", "Pfd"],
+    Insurance: ["Equity", "Corp"],
+    "Asset Management": ["Equity", "Corp"],
+    Technology: ["Equity"],
+    Healthcare: ["Equity"],
+    Energy: ["Equity", "Comdty"],
+    Mining: ["Equity", "Comdty"],
+    "Real Estate": ["Equity"],
+    "Fixed Income": ["Corp", "Govt", "Mtge", "Muni"],
+    Currency: ["Curncy"],
+    Commodity: ["Comdty"],
+    Index: ["Index"],
+  };
+
   const enrichByFilters = async () => {
     if (!user?.id) {
       toast.error("Session utilisateur requise");
@@ -559,7 +597,7 @@ const DataManager = () => {
         }
       };
 
-      // Source 1: OpenFIGI (equities, bonds, etc.)
+      // Source 1: OpenFIGI by exchange codes (country-based)
       if (countryFilter) {
         const codes = getCountryCodes(countryFilter);
         if (codes.length > 0) {
@@ -572,13 +610,29 @@ const DataManager = () => {
         }
       }
 
-      const searchQueryText = [sectorFilter, countryFilter].filter(Boolean).join(" ").trim();
-      if (searchQueryText) {
-        const { data: textData, error: textError } = await supabase.functions.invoke("openfigi-lookup", {
-          body: { searchQuery: searchQueryText, limit: 300 },
-        });
-        if (!textError && textData?.assets) {
-          addUnique(textData.assets);
+      // Source 1b: Multiple text searches with sector keywords
+      const sectorKeywords = sectorFilter ? (SECTOR_SEARCH_KEYWORDS[sectorFilter] || [sectorFilter]) : [""];
+      const searchQueries = new Set<string>();
+
+      for (const kw of sectorKeywords) {
+        if (countryFilter && kw) searchQueries.add(`${kw} ${countryFilter}`);
+        else if (kw) searchQueries.add(kw);
+        else if (countryFilter) searchQueries.add(countryFilter);
+      }
+      // Also add plain sector + country
+      if (sectorFilter && countryFilter) searchQueries.add(`${sectorFilter} ${countryFilter}`);
+      if (sectorFilter) searchQueries.add(sectorFilter);
+
+      for (const sq of searchQueries) {
+        try {
+          const { data: textData, error: textError } = await supabase.functions.invoke("openfigi-lookup", {
+            body: { searchQuery: sq, limit: 200 },
+          });
+          if (!textError && textData?.assets) {
+            addUnique(textData.assets);
+          }
+        } catch (e) {
+          console.warn(`Text search failed for "${sq}":`, e);
         }
       }
 
@@ -621,19 +675,53 @@ const DataManager = () => {
       const selectedCountry = countryFilter ? normalizeCountryLabel(countryFilter) : "";
       const selectedSector = sectorFilter ? normalizeSectorLabel(sectorFilter) : "";
 
+      // Relaxed matching: accept OpenFIGI sector types that are compatible
+      const compatSectors = selectedSector ? (OPENFIGI_SECTOR_COMPAT[selectedSector] || []) : [];
+
       const matching = pool.filter((item) => {
         const country = normalizeCountryLabel(item.country, item.country_id, item.mic_code);
         const sector = normalizeSectorLabel(item.sector);
         const okCountry = !selectedCountry || country === selectedCountry;
-        const okSector = !selectedSector || sector === selectedSector;
+
+        // Relaxed sector match: exact match OR compatible OpenFIGI sector OR description contains keyword
+        let okSector = !selectedSector;
+        if (selectedSector && !okSector) {
+          okSector = sector === selectedSector;
+        }
+        if (!okSector && compatSectors.length > 0) {
+          okSector = compatSectors.some((cs) => sector === cs || (item.sector || "").toUpperCase().includes(cs.toUpperCase()));
+        }
+        if (!okSector && selectedSector) {
+          const desc = (item.description || "").toLowerCase();
+          const name = (item.asset_name || "").toLowerCase();
+          const sectorKws = SECTOR_SEARCH_KEYWORDS[selectedSector] || [selectedSector];
+          okSector = sectorKws.some((kw) => desc.includes(kw.toLowerCase()) || name.includes(kw.toLowerCase()));
+        }
+
         return okCountry && okSector;
       });
 
+      // If strict matching yields nothing, keep all from country (user explicitly asked to dig)
+      let finalMatching = matching;
+      if (finalMatching.length === 0 && countryFilter) {
+        // Keep all assets from that country regardless of sector
+        finalMatching = pool.filter((item) => {
+          const country = normalizeCountryLabel(item.country, item.country_id, item.mic_code);
+          return country === selectedCountry;
+        });
+        if (finalMatching.length > 0 && selectedSector) {
+          // Override sector to the selected one for assets from that country
+          finalMatching = finalMatching.map((item) => ({ ...item, sector: selectedSector }));
+        }
+      }
+
       // For crypto/forex, relax country filter since they're global
-      const finalMatching = matching.length > 0 ? matching : (isCryptoSector || isCurrencySector) ? pool : [];
+      if (finalMatching.length === 0 && (isCryptoSector || isCurrencySector)) {
+        finalMatching = pool;
+      }
 
       if (finalMatching.length === 0) {
-        toast.error("Aucun actif ne correspond exactement au pays/secteur sélectionné");
+        toast.error("Aucun actif ne correspond aux filtres sélectionnés");
         return;
       }
 
@@ -644,7 +732,7 @@ const DataManager = () => {
           item.isin && String(item.isin).trim().length > 0
             ? item.isin
             : `NOISIN-${(item.ticker || item.asset_name || "ASSET").toString().replace(/\s+/g, "").toUpperCase()}-${now}-${index}`,
-        sector: normalizeSectorLabel(item.sector),
+        sector: normalizeSectorLabel(item.sector) || selectedSector,
         acf: item.acf || "",
         ric: item.ric || "",
         ticker: item.ticker || "",
