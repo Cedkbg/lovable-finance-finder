@@ -1,24 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 
-export default defineConfig(({ mode }) => ({
-  // 🔥 IMPORTANT POUR GITHUB PAGES
-  base: "/lovable-finance-finder/",
+export default defineConfig({
+  base: "/", // 🔥 important pour corriger le 404
 
-  server: {
-    host: "::",
-    port: 8080,
-    hmr: {
-      overlay: false,
-    },
-  },
-
-  plugins: [
-    react(),
-    mode === "development" ? componentTagger() : null,
-  ].filter(Boolean),
+  plugins: [react()],
 
   resolve: {
     alias: {
@@ -26,7 +13,16 @@ export default defineConfig(({ mode }) => ({
     },
   },
 
+  optimizeDeps: {
+    include: ["@tanstack/react-query", "next-themes", "sonner"],
+  },
+
+  server: {
+    host: true,
+  },
+
   build: {
     outDir: "dist",
+    chunkSizeWarningLimit: 2000,
   },
-}));
+});

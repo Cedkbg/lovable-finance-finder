@@ -89,7 +89,7 @@ async function searchViaOpenFigi(query: string): Promise<FinancialAsset | null> 
 
     const asset = data.results[0].asset;
     const userId = await getCurrentUserId();
-
+ 
     // If no ISIN returned, generate a placeholder to allow DB storage
     if (!asset.isin) {
       asset.isin = `NOISIN-${asset.ticker || query.trim().toUpperCase()}-${asset.country_id || 'XX'}`;
