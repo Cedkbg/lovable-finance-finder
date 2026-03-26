@@ -119,10 +119,8 @@ const COUNTRY_MAP: Record<string, string[]> = {
 export function getCountryCodes(query: string): string[] {
   const q = query.trim().toUpperCase();
   
-  // Direct match
   if (COUNTRY_MAP[q]) return COUNTRY_MAP[q];
   
-  // Partial match
   const matches: string[] = [];
   for (const [name, codes] of Object.entries(COUNTRY_MAP)) {
     if (name.includes(q) || q.includes(name)) {
@@ -130,7 +128,6 @@ export function getCountryCodes(query: string): string[] {
     }
   }
   
-  // If input is already a 2-letter code, include it
   if (q.length === 2) matches.push(q);
   
   return [...new Set(matches)];

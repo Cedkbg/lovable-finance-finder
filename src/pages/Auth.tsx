@@ -75,7 +75,7 @@ const Auth = () => {
         if (error) throw error;
         navigate("/");
       }
-    } catch (err: any) {
+    } catch (err) {
       toast.error(getAuthErrorMessage(err));
     } finally {
       setLoading(false);

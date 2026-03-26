@@ -16,7 +16,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { generateProjectDocument } from "@/lib/generate-project-doc";
 
-const SOURCE_ICONS: Record<string, { icon: typeof Database; label: string }> = {
+const SOURCE_ICONS: Record<string, { icon: any; label: string }> = {
   database: { icon: Database, label: "FROM_DATABASE" },
   local_dataset: { icon: HardDrive, label: "FROM_LOCAL_DATASET" },
   openfigi: { icon: Wifi, label: "FROM_OPENFIGI_API" },
@@ -92,7 +92,7 @@ const Index = () => {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") handleSearch();
   };
 
@@ -251,3 +251,4 @@ const Index = () => {
 };
 
 export default Index;
+

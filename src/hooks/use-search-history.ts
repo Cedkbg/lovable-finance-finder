@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 
+
 export interface SearchHistoryItem {
   query: string;
   assetName: string | null;

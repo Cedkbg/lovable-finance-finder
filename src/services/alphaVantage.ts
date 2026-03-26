@@ -1,37 +1,45 @@
 import axios from "axios";
+import { getApiErrorMessage } from "@/lib/error-utils";
+// import type { LivePrice } from "@/hooks/useLivePrice";
 
-const API_KEY = import.meta.env.VITE_EODHD_API_KEY || "demo";
+const API_KEY = "demo"; // Clé démo AlphaVantage (limite 5 req/min)
 
-interface PriceData {
-  price: number;
-  change: number;
-  changePercent: number;
-  timestamp: number;
-}
 
-export const fetchStockPrice = async (symbol: string): Promise<PriceData> => {
-  if (!API_KEY || API_KEY === "demo") {
-    console.warn("Utilisez une vraie clé EODHD API dans .env");
-    throw new Error("Clé API manquante");
-  }
-
+export const getLivePrice = async (symbol: string) => {
   try {
-    const res = await axios.get(
-      `https://eodhd.com/api/real-time/${symbol}.json?api_token=${API_KEY}&fmt=json`
+    const response = await axios.get(
+      `https://www.alphavantage.co/query`,
+      {
+        params: {
+          function: "GLOBAL_QUOTE",
+          symbol,
+          apikey: API_KEY,
+        },
+      }
     );
-    const data = res.data as any;
-    if (!data || typeof data !== 'object') {
-      throw new Error(`Données invalides pour ${symbol}`);
+
+    const quote = response.data["Global Quote"];
+    if (!quote) {
+      throw new Error("No quote data");
     }
+
+    const priceStr = quote["05. price"];
+    const changeStr = quote["09. change"];
+    const changePctStr = quote["10. change percent"];
+
+    const price = parseFloat(priceStr);
+    const change = parseFloat(changeStr.replace(/[^\d.-]/g, ""));
+    const changePercent = parseFloat(changePctStr.replace(/[^\d.-]/g, ""));
+
     return {
-      price: parseFloat(data.close || data.price || '0') || 0,
-      change: parseFloat(data.change || '0') || 0,
-      changePercent: parseFloat(data.change_percent || '0') || 0,
-      timestamp: data.timestamp || Date.now(),
+      price,
+      change,
+      changePercent,
+      timestamp: Date.now(),
     };
   } catch (error) {
-    console.error(`Erreur fetch ${symbol}:`, error);
-    throw error;
+    const msg = getApiErrorMessage(error, "AlphaVantage");
+    console.error(msg);
+    return null;
   }
 };
-

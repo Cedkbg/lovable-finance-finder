@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchStockPrice } from "@/services/alphaVantage";
+import { getLivePrice  } from "@/services/alphaVantage";
 
 export interface LivePrice {
   price: number;
@@ -8,16 +8,20 @@ export interface LivePrice {
   timestamp: number;
 }
 
-export const useLivePrice = (symbol: string) => {
-  return useQuery<LivePrice, Error>({
-    queryKey: ["price", symbol],
-    queryFn: () => fetchStockPrice(symbol),
-    refetchInterval: 5000, // 5s pour real-time
-    refetchOnWindowFocus: true,
-    staleTime: 30_000, // 30s fresh
-    gcTime: 5 * 60_000, // 5min cache
-    retry: 3,
-    enabled: !!symbol,
+export const useLivePrices = (symbols: string[]) => {
+  return useQueries({
+    queries: symbols.map(symbol => ({
+      queryKey: ["price", symbol],
+      queryFn: () => getLivePrice(symbol),
+      refetchInterval: 5000,
+      refetchOnWindowFocus: true,
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      retry: 3,
+      enabled: !!symbol,
+    })),
   });
 };
+
+export const useLivePrice = (symbol: string) => useLivePrices([symbol])[0];
 

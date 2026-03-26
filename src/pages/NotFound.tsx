@@ -5,7 +5,8 @@ const NotFound = () => {
   const location = useLocation();
 
   useEffect(() => {
-    console.error("404 Error: User attempted to access non-existent route:", location.pathname);
+    toast.error(`Page "${location.pathname}" non trouvée. Redirection accueil.`);
+    setTimeout(() => navigate("/"), 2000);
   }, [location.pathname]);
 
   return (

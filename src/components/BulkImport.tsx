@@ -30,10 +30,10 @@ const BulkImport = ({ onSelectResult }: BulkImportProps) => {
     if (ext === "csv" || ext === "txt") {
       return new Promise((resolve) => {
         Papa.parse(file, {
-          complete: (result) => {
+          complete: (result: Papa.ParseResult) => {
             const ids = result.data
               .flat()
-              .map((v: any) => String(v).trim())
+              .map((v: unknown) => String(v).trim())
               .filter((v) => v.length > 0 && v !== "ISIN" && v !== "Ticker" && v !== "ticker" && v !== "isin");
             resolve(ids);
           },

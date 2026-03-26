@@ -1,0 +1,88 @@
+import type { FinancialAsset } from './mock-data';
+
+export const AFRICAN_EMERGING_ASSETS: FinancialAsset[] = [
+  // South Africa JSE
+  {
+    id: 'za1',
+    assetName: 'Standard Bank Group',
+    isin: 'ZA0000777771',
+    sector: 'Financials',
+    acf: '',
+    ric: 'SBGJ.J',
+    ticker: 'SBG',
+    symbol: 'SBGJ',
+    countryId: 'ZA',
+    country: 'South Africa',
+    micCode: 'JSE',
+    currencyId: 'ZAR',
+    currency: 'South African Rand',
+    description: 'Standard Bank Group Limited provides banking and related financial services.',
+    source: 'eodhd',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  // Mauritius
+  {
+    id: 'mu1',
+  assetName: 'Mauritius Commercial Bank',
+    isin: 'MU0019C00001',
+    sector: 'Financials',
+    acf: '',
+    ric: 'MCB.MU',
+    ticker: 'MCB',
+    symbol: 'MCB',
+    countryId: 'MU',
+    country: 'Mauritius',
+    micCode: 'MEMX',
+    currencyId: 'MUR',
+    currency: 'Mauritian Rupee',
+    description: 'MCB Group Limited provides banking services.',
+    source: 'eodhd',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  // Egypt EGX
+  {
+    id: 'eg1',
+    assetName: 'Commercial International Bank',
+    isin: 'EGS3C670018',
+    sector: 'Financials',
+    acf: '',
+    ric: 'COMI.CA',
+    ticker: 'COMI',
+    symbol: 'COMI',
+    countryId: 'EG',
+    country: 'Egypt',
+    micCode: 'EGX',
+    currencyId: 'EGP',
+    currency: 'Egyptian Pound',
+    description: 'Commercial International Bank provides banking services in Egypt.',
+    source: 'eodhd',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  // Morocco CSE
+  {
+    id: 'ma1',
+    assetName: 'Attijariwafa Bank',
+    isin: 'MA0000011486',
+    sector: 'Financials',
+    acf: '',
+    ric: 'ATW.CS',
+    ticker: 'ATW',
+    symbol: 'ATW',
+    countryId: 'MA',
+    country: 'Morocco',
+    micCode: 'CSE',
+    currencyId: 'MAD',
+    currency: 'Moroccan Dirham',
+    description: 'Attijariwafa Bank SA provides banking and financial services.',
+    source: 'eodhd',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  // Add more: Malawi, Uganda, Zambia, Zimbabwe...
+];
+
+// preload supprimé - EODHD gère africains temps réel
+

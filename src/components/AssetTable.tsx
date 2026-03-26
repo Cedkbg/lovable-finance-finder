@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
-import { Download, Filter, ChevronLeft, ChevronRight, Database, HardDrive, Wifi } from "lucide-react";
+import { Download, Filter, ChevronLeft, ChevronRight, Database, HardDrive, TrendingUp, Wifi } from "lucide-react";
 import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
+import * as fileSaver from "file-saver";
 import type { FinancialAsset } from "@/lib/mock-data";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +12,15 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
+type LivePrice = {
+  price: number;
+  change: number;
+  changePercent: number;
+  timestamp: number;
+};
+
+// import { useLivePrices } from "@/hooks/useLivePrice"; // Temporairement désactivé car useQueries manquant
+
 
 interface AssetTableProps {
   assets: FinancialAsset[];
@@ -39,10 +48,13 @@ const COLUMNS: { key: keyof FinancialAsset; label: string }[] = [
   { key: "updatedAt", label: "Updated At" },
 ];
 
-const SOURCE_CONFIG: Record<string, { label: string; icon: typeof Database; className: string }> = {
+const PAGE_SIZE = 25;
+
+const SOURCE_CONFIG: Record<string, { label: string; icon: React.ComponentType<any>; className: string }> = {
   database: { label: "DB", icon: Database, className: "bg-primary/10 text-primary border-primary/20" },
   local_dataset: { label: "LOCAL", icon: HardDrive, className: "bg-accent text-accent-foreground border-accent" },
-  openfigi: { label: "FIGI", icon: Wifi, className: "bg-destructive/10 text-destructive border-destructive/20" },
+  eodhd: { label: "EOD", icon: TrendingUp, className: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
+  openfigi: { label: "FIGI", icon: Wifi, className: "bg-orange-500/10 text-orange-500 border-orange-500/20" },
   manual: { label: "MANUAL", icon: Database, className: "bg-muted text-muted-foreground border-border" },
 };
 
@@ -57,12 +69,10 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
-const PAGE_SIZE = 25;
-
 export function exportToExcel(assets: FinancialAsset[], filename = "enriched_assets") {
   const rows = assets.map((a) =>
     COLUMNS.reduce((obj, col) => {
-      obj[col.label] = a[col.key] || "";
+      obj[col.label] = String(a[col.key] || "");
       return obj;
     }, {} as Record<string, string>)
   );
@@ -70,7 +80,7 @@ export function exportToExcel(assets: FinancialAsset[], filename = "enriched_ass
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Assets");
   const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  saveAs(new Blob([buf], { type: "application/octet-stream" }), `${filename}.xlsx`);
+  fileSaver.saveAs(new Blob([buf], { type: "application/octet-stream" }), `${filename}.xlsx`);
 }
 
 const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
@@ -78,6 +88,16 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
   const [sectorFilter, setSectorFilter] = useState("");
   const [sortKey, setSortKey] = useState<keyof FinancialAsset | "">("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const symbols: string[] = useMemo(() => assets.map(a => a.symbol).filter((s): s is string => Boolean(s)), [assets]);
+
+  const priceData = useMemo(() => {
+    const map = new Map<string, LivePrice | null>();
+    symbols.forEach(symbol => {
+      map.set(symbol, null);
+    });
+    return map;
+  }, [symbols]);
+
 
   const handleSort = (key: keyof FinancialAsset) => {
     if (sortKey === key) {
@@ -89,13 +109,11 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
     setPage(0);
   };
 
-  // Extract unique sectors
   const sectors = useMemo(() => {
     const s = new Set(assets.map((a) => a.sector).filter(Boolean));
     return Array.from(s).sort();
   }, [assets]);
 
-  // Filtered & sorted assets
   const filtered = useMemo(() => {
     let result = sectorFilter ? assets.filter((a) => a.sector === sectorFilter) : [...assets];
     if (sortKey) {
@@ -108,11 +126,9 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
     return result;
   }, [assets, sectorFilter, sortKey, sortDir]);
 
-  // Pagination
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pageAssets = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  // Reset page when filter changes
   const handleSectorChange = (val: string) => {
     setSectorFilter(val);
     setPage(0);
@@ -128,7 +144,6 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
           {title && (
             <p className="font-mono text-xs font-semibold text-primary">{title}</p>
           )}
-          {/* Sector filter */}
           {sectors.length > 1 && (
             <div className="flex items-center gap-1.5">
               <Filter className="w-3 h-3 text-muted-foreground" />
@@ -188,28 +203,58 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
                 <TableCell className="font-mono text-[11px] px-2 py-1.5 text-muted-foreground">
                   {page * PAGE_SIZE + idx + 1}
                 </TableCell>
-                {COLUMNS.map((col) => (
-                  <TableCell
-                    key={col.key}
-                    className={`font-mono text-[11px] px-2 py-1.5 whitespace-nowrap ${
-                      col.key === "description" ? "max-w-[200px] truncate" : ""
-                    }`}
-                    title={String(asset[col.key] || "")}
-                  >
-                    {col.key === "source" ? (
-                      <SourceBadge source={String(asset[col.key] || "")} />
-                    ) : (
-                      asset[col.key] || "—"
-                    )}
-                  </TableCell>
-                ))}
+                {COLUMNS.map((col) => {
+                  if (col.key === "symbol" && asset.symbol) {
+                    const price = priceData.get(asset.symbol);
+                    return (
+                      <TableCell
+                        key={col.key}
+                        className="font-mono text-[11px] px-2 py-1.5 whitespace-nowrap"
+                        title={String(asset[col.key] || "")}
+                      >
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-semibold">{asset.symbol}</span>
+                          {price && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 ml-auto">
+                              <TrendingUp className="w-2.5 h-2.5 mr-0.5" />
+                              {price.price.toFixed(2)} {asset.currency || ''}
+                              <span className={`ml-1 text-[9px] ${price.change >= 0 ? 'text-green-500' : 'text-destructive'}`}>
+                                {price.changePercent.toFixed(1)}%
+                              </span>
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                    );
+                  }
+                  return (
+                    <TableCell
+                      key={col.key}
+                      className={`font-mono text-[11px] px-2 py-1.5 whitespace-nowrap ${
+                        col.key === "description" ? "max-w-[200px] truncate" : ""
+                      }`}
+                      title={String(asset[col.key] || "")}
+                    >
+                      {col.key === "source" ? (
+                        (() => {
+                          const baseSource = String(asset[col.key] || "manual");
+                          const hasPrice = asset.symbol && priceData.has(asset.symbol);
+                          const fullSource = hasPrice ? `${baseSource.toUpperCase()}+LIVE` : baseSource;
+                          return <SourceBadge source={fullSource.toLowerCase()} />;
+                        })()
+                      ) : (
+                        asset[col.key] || "—"
+                      )}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
 
-      {/* Footer with pagination */}
+      {/* Pagination */}
       <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-muted/30 gap-2 flex-wrap">
         <p className="font-mono text-[10px] text-muted-foreground">
           {filtered.length} résultat{filtered.length > 1 ? "s" : ""}
