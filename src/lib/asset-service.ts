@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeCountryLabel, normalizeSectorLabel } from "@/lib/asset-labels";
-import { MOCK_DATA, type FinancialAsset } from "./mock-data";
+import type { FinancialAsset } from "./mock-data";
 
 export interface DbAsset {
   id: string;
@@ -50,7 +50,7 @@ async function getCurrentUserId(): Promise<string | null> {
   return data.user?.id || null;
 }
 
-// CAS 1: Search in database
+// Search in database first
 async function searchInDb(query: string): Promise<FinancialAsset | null> {
   const q = query.trim().toUpperCase();
 
@@ -62,51 +62,73 @@ async function searchInDb(query: string): Promise<FinancialAsset | null> {
     .single();
 
   if (error || !data) return null;
-  return dbToFinancialAsset(data as DbAsset);
+
+  // Check freshness: if older than 24h, mark for refresh
+  const asset = dbToFinancialAsset(data as DbAsset);
+  const age = Date.now() - new Date(asset.updatedAt).getTime();
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+
+  if (age > ONE_DAY) {
+    // Trigger background refresh via EODHD
+    refreshFromEodhd(asset.ticker, asset.micCode, data as DbAsset).catch(() => {});
+  }
+
+  return asset;
 }
 
-// CAS 2a: Search in mock data fallback
-function searchInMockData(query: string): FinancialAsset | null {
-  const q = query.trim().toUpperCase();
-  return (
-    MOCK_DATA.find(
-      (a) =>
-        a.isin.toUpperCase() === q ||
-        a.ticker.toUpperCase() === q ||
-        a.symbol.toUpperCase() === q ||
-        a.ric.toUpperCase().includes(q)
-    ) || null
-  );
-}
-
-// CAS 2b: Search via OpenFIGI API
-async function searchViaOpenFigi(query: string): Promise<FinancialAsset | null> {
+// Background refresh from EODHD
+async function refreshFromEodhd(ticker: string, exchange: string, existing: DbAsset): Promise<void> {
+  if (!ticker) return;
   try {
-    const { data, error } = await supabase.functions.invoke("openfigi-lookup", {
-      body: { identifiers: [query.trim().toUpperCase()] },
+    const { data, error } = await supabase.functions.invoke("eodhd-lookup", {
+      body: { mode: "fundamentals", ticker, exchange: exchange || "US" },
+    });
+    if (error || !data?.asset) return;
+
+    const updates: Record<string, any> = {};
+    const a = data.asset;
+    if (a.sector && a.sector !== existing.sector) updates.sector = a.sector;
+    if (a.description && a.description !== existing.description) updates.description = a.description;
+    if (a.country && a.country !== existing.country) updates.country = a.country;
+    if (a.currency && a.currency !== existing.currency) updates.currency = a.currency;
+
+    if (Object.keys(updates).length > 0) {
+      await supabase.from("financial_assets").update(updates).eq("id", existing.id);
+    }
+  } catch {
+    // Silent fail for background refresh
+  }
+}
+
+// Search via EODHD API (replaces OpenFIGI)
+async function searchViaEodhd(query: string): Promise<FinancialAsset | null> {
+  try {
+    // Try search mode first
+    const { data, error } = await supabase.functions.invoke("eodhd-lookup", {
+      body: { mode: "search", query: query.trim(), limit: 5 },
     });
 
-    if (error || !data?.results?.[0]?.found) return null;
+    if (error || !data?.assets?.length) return null;
 
-    const asset = data.results[0].asset;
+    const best = data.assets[0];
     const userId = await getCurrentUserId();
 
-    // If no ISIN returned, generate a placeholder to allow DB storage
-    if (!asset.isin) {
-      asset.isin = `NOISIN-${asset.ticker || query.trim().toUpperCase()}-${asset.country_id || "XX"}`;
+    // Generate ISIN placeholder if missing
+    if (!best.isin) {
+      best.isin = `NOISIN-${best.ticker || query.trim().toUpperCase()}-${best.country_id || "XX"}`;
     }
 
-    // Save to DB for future lookups
+    // Save to DB
     const { data: inserted, error: insertErr } = await supabase
       .from("financial_assets")
-      .upsert({ ...asset, user_id: userId }, { onConflict: "isin" })
+      .upsert({ ...best, user_id: userId }, { onConflict: "isin" })
       .select()
       .single();
 
     if (insertErr) {
-      console.warn("Failed to persist OpenFIGI result:", insertErr);
+      console.warn("Failed to persist EODHD result:", insertErr);
       return dbToFinancialAsset({
-        ...asset,
+        ...best,
         id: crypto.randomUUID(),
         user_id: userId,
         created_at: new Date().toISOString(),
@@ -116,55 +138,38 @@ async function searchViaOpenFigi(query: string): Promise<FinancialAsset | null> 
 
     return dbToFinancialAsset(inserted as DbAsset);
   } catch (err) {
-    console.error("OpenFIGI lookup failed:", err);
+    console.error("EODHD lookup failed:", err);
     return null;
   }
 }
 
-// Save a found mock asset to user's collection
-async function saveToUserDb(asset: FinancialAsset): Promise<void> {
-  const userId = await getCurrentUserId();
-  if (!userId) return;
-
-  await supabase.from("financial_assets").upsert(
-    {
-      asset_name: asset.assetName,
-      isin: asset.isin,
-      sector: normalizeSectorLabel(asset.sector),
-      acf: asset.acf,
-      ric: asset.ric,
-      ticker: asset.ticker,
-      symbol: asset.symbol,
-      country_id: (asset.countryId || "").toUpperCase(),
-      country: normalizeCountryLabel(asset.country, asset.countryId, asset.micCode),
-      mic_code: asset.micCode,
-      currency_id: (asset.currencyId || "").toUpperCase(),
-      currency: asset.currency,
-      description: asset.description,
-      source: "local_dataset",
-      user_id: userId,
-    },
-    { onConflict: "isin", ignoreDuplicates: true }
-  );
-}
-
-// Main search: DB → Mock → OpenFIGI
+// Main search: DB → EODHD → CoinGecko (crypto) → Exchange Rates (forex)
 export async function searchAsset(query: string): Promise<{ asset: FinancialAsset | null; source: string }> {
   // 1. Database
   const dbResult = await searchInDb(query);
   if (dbResult) return { asset: dbResult, source: "database" };
 
-  // 2. Mock data fallback
-  const mockResult = searchInMockData(query);
-  if (mockResult) {
-    // Try to persist (may fail if ISIN conflict with public data - that's OK)
-    await saveToUserDb(mockResult);
-    return { asset: mockResult, source: "local_dataset" };
-  }
+  // 2. EODHD API (real-time)
+  const eodhdResult = await searchViaEodhd(query);
+  if (eodhdResult) return { asset: eodhdResult, source: "eodhd" };
 
-  // 3. OpenFIGI API
-  const figiResult = await searchViaOpenFigi(query);
-  if (figiResult) return { asset: figiResult, source: "openfigi" };
+  // 3. CoinGecko for crypto
+  try {
+    const { data, error } = await supabase.functions.invoke("multi-source-lookup", {
+      body: { source: "coingecko", query: query.trim(), limit: 1 },
+    });
+    if (!error && data?.assets?.length) {
+      const asset = data.assets[0];
+      const userId = await getCurrentUserId();
+      if (!asset.isin) asset.isin = `CRYPTO-${asset.ticker || query.trim().toUpperCase()}`;
+      const { data: inserted } = await supabase
+        .from("financial_assets")
+        .upsert({ ...asset, user_id: userId }, { onConflict: "isin" })
+        .select()
+        .single();
+      if (inserted) return { asset: dbToFinancialAsset(inserted as DbAsset), source: "coingecko" };
+    }
+  } catch {}
 
   return { asset: null, source: "not_found" };
 }
