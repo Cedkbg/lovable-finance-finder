@@ -115,28 +115,29 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
     const q = country.trim();
     if (!q) return;
 
-    const codes = getCountryCodes(q);
-    if (codes.length === 0) {
-      toast.error("Pays non reconnu. Essayez un code comme US, FR, MP...");
-      return;
-    }
-
     setImporting(true);
-    setImportProgress(`Recherche OpenFIGI: ${codes.join(", ")}...`);
+    setImportProgress(`Recherche EODHD: ${q}...`);
 
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
 
     try {
-      const { data, error } = await supabase.functions.invoke("openfigi-lookup", {
-        body: { exchCodes: codes },
+      const { data, error } = await supabase.functions.invoke("eodhd-lookup", {
+        body: { mode: "exchange-list", country: q, limit: 500 },
       });
 
-      if (error || !data?.assets) {
-        toast.error(`Aucun actif trouvé pour "${q}" sur OpenFIGI`);
-        setImporting(false);
-        setImportProgress("");
-        return;
+      if (error || !data?.assets || data.assets.length === 0) {
+        // Fallback: try search mode
+        const { data: searchData, error: searchError } = await supabase.functions.invoke("eodhd-lookup", {
+          body: { mode: "search", query: q, limit: 100 },
+        });
+        if (searchError || !searchData?.assets || searchData.assets.length === 0) {
+          toast.error(`Aucun actif trouvé pour "${q}" sur EODHD`);
+          setImporting(false);
+          setImportProgress("");
+          return;
+        }
+        data.assets = searchData.assets;
       }
 
       const assets = data.assets;
@@ -146,7 +147,7 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
       for (let i = 0; i < assets.length; i += 50) {
         const chunk = assets.slice(i, i + 50).map((a: any) => ({
           ...a,
-          isin: a.isin || `NOISN-${a.ticker || a.asset_name}-${a.country_id || "XX"}-${i + Math.random().toString(36).slice(2, 6)}`,
+          isin: a.isin && a.isin.trim().length > 0 ? a.isin : `NOISIN-${a.ticker || a.asset_name}-${a.country_id || "XX"}-${i + Math.random().toString(36).slice(2, 6)}`,
           user_id: userId,
         }));
 
@@ -160,12 +161,14 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
       }
 
       setImportProgress("Chargement des résultats...");
+      const codes = getCountryCodes(q);
       const filters: string[] = [];
       for (const code of codes) {
         filters.push(`country.eq.${code}`);
         filters.push(`country_id.eq.${code}`);
         filters.push(`mic_code.eq.${code}`);
       }
+      filters.push(`country.ilike.%${q}%`);
 
       const { data: dbData } = await supabase
         .from("financial_assets")
@@ -176,16 +179,11 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
       if (dbData && dbData.length > 0) {
         const mapped = dbData.map((d) => dbToFinancialAsset(d as DbAsset));
         onResults(mapped, q);
-        toast.success(`${mapped.length} actifs importés pour "${q}" (${codes.length} bourses)`);
+        toast.success(`${mapped.length} actifs importés pour "${q}" via EODHD`);
       } else {
         toast.error(`Aucun actif trouvé pour "${q}"`);
       }
 
-      if (data.hasMore) {
-        toast.info("Il y a plus de résultats disponibles. Ajoutez une clé API OpenFIGI pour tout récupérer.");
-      }
-
-      // Refresh counts after import
       loadCounts();
     } catch (err) {
       console.error("Import error:", err);
@@ -281,7 +279,7 @@ const CountrySearch = ({ onResults }: CountrySearchProps) => {
         onClick={handleBatchImport}
         disabled={importing || loading || !country.trim()}
         className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-primary text-primary-foreground font-mono text-xs hover:bg-primary/90 transition-colors disabled:opacity-50"
-        title="Importer TOUTES les entreprises du pays depuis OpenFIGI (toutes les bourses)"
+        title="Importer les actifs du pays depuis EODHD (données temps réel)"
       >
         {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
         IMPORT ALL

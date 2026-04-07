@@ -529,8 +529,7 @@ const DataManager = () => {
     return { topCountries, topSectors, liveCount: matchedAssets.length };
   };
 
-  // Sector compatibility: OpenFIGI uses "Equity","Corp","Govt" etc, not "Finance","Banking"
-  // Map user-selected sectors to OpenFIGI-compatible terms + accept related sectors
+  // Sector compatibility mapping
   const SECTOR_SEARCH_KEYWORDS: Record<string, string[]> = {
     Finance: ["Finance", "Financial", "Bank", "Insurance", "Asset Management"],
     Banking: ["Bank", "Banking", "Financial"],
@@ -548,23 +547,6 @@ const DataManager = () => {
     Agriculture: ["Agriculture", "Agri", "Farm"],
     Construction: ["Construction", "Building"],
     Transportation: ["Transport", "Logistics", "Shipping"],
-  };
-
-  // OpenFIGI marketSector values that are compatible with our taxonomy
-  const OPENFIGI_SECTOR_COMPAT: Record<string, string[]> = {
-    Finance: ["Equity", "Corp", "Pfd"],
-    Banking: ["Equity", "Corp", "Pfd"],
-    Insurance: ["Equity", "Corp"],
-    "Asset Management": ["Equity", "Corp"],
-    Technology: ["Equity"],
-    Healthcare: ["Equity"],
-    Energy: ["Equity", "Comdty"],
-    Mining: ["Equity", "Comdty"],
-    "Real Estate": ["Equity"],
-    "Fixed Income": ["Corp", "Govt", "Mtge", "Muni"],
-    Currency: ["Curncy"],
-    Commodity: ["Comdty"],
-    Index: ["Index"],
   };
 
   const enrichByFilters = async () => {
@@ -597,20 +579,21 @@ const DataManager = () => {
         }
       };
 
-      // Source 1: OpenFIGI by exchange codes (country-based)
+      // Source 1: EODHD exchange list (by country)
       if (countryFilter) {
-        const codes = getCountryCodes(countryFilter);
-        if (codes.length > 0) {
-          const { data: countryData, error: countryError } = await supabase.functions.invoke("openfigi-lookup", {
-            body: { exchCodes: codes },
+        try {
+          const { data: eodhdData, error: eodhdError } = await supabase.functions.invoke("eodhd-lookup", {
+            body: { mode: "exchange-list", country: countryFilter, limit: 500 },
           });
-          if (!countryError && countryData?.assets) {
-            addUnique(countryData.assets);
+          if (!eodhdError && eodhdData?.assets) {
+            addUnique(eodhdData.assets);
           }
+        } catch (e) {
+          console.warn("EODHD exchange-list failed:", e);
         }
       }
 
-      // Source 1b: Multiple text searches with sector keywords
+      // Source 1b: EODHD text search with sector keywords
       const sectorKeywords = sectorFilter ? (SECTOR_SEARCH_KEYWORDS[sectorFilter] || [sectorFilter]) : [""];
       const searchQueries = new Set<string>();
 
@@ -619,20 +602,19 @@ const DataManager = () => {
         else if (kw) searchQueries.add(kw);
         else if (countryFilter) searchQueries.add(countryFilter);
       }
-      // Also add plain sector + country
       if (sectorFilter && countryFilter) searchQueries.add(`${sectorFilter} ${countryFilter}`);
       if (sectorFilter) searchQueries.add(sectorFilter);
 
       for (const sq of searchQueries) {
         try {
-          const { data: textData, error: textError } = await supabase.functions.invoke("openfigi-lookup", {
-            body: { searchQuery: sq, limit: 200 },
+          const { data: searchData, error: searchError } = await supabase.functions.invoke("eodhd-lookup", {
+            body: { mode: "search", query: sq, limit: 100 },
           });
-          if (!textError && textData?.assets) {
-            addUnique(textData.assets);
+          if (!searchError && searchData?.assets) {
+            addUnique(searchData.assets);
           }
         } catch (e) {
-          console.warn(`Text search failed for "${sq}":`, e);
+          console.warn(`EODHD search failed for "${sq}":`, e);
         }
       }
 
@@ -675,21 +657,14 @@ const DataManager = () => {
       const selectedCountry = countryFilter ? normalizeCountryLabel(countryFilter) : "";
       const selectedSector = sectorFilter ? normalizeSectorLabel(sectorFilter) : "";
 
-      // Relaxed matching: accept OpenFIGI sector types that are compatible
-      const compatSectors = selectedSector ? (OPENFIGI_SECTOR_COMPAT[selectedSector] || []) : [];
-
       const matching = pool.filter((item) => {
         const country = normalizeCountryLabel(item.country, item.country_id, item.mic_code);
         const sector = normalizeSectorLabel(item.sector);
         const okCountry = !selectedCountry || country === selectedCountry;
 
-        // Relaxed sector match: exact match OR compatible OpenFIGI sector OR description contains keyword
         let okSector = !selectedSector;
         if (selectedSector && !okSector) {
           okSector = sector === selectedSector;
-        }
-        if (!okSector && compatSectors.length > 0) {
-          okSector = compatSectors.some((cs) => sector === cs || (item.sector || "").toUpperCase().includes(cs.toUpperCase()));
         }
         if (!okSector && selectedSector) {
           const desc = (item.description || "").toLowerCase();
@@ -743,7 +718,7 @@ const DataManager = () => {
         currency_id: (item.currency_id || "").toString().toUpperCase(),
         currency: item.currency || item.currency_id || "",
         description: item.description || "",
-        source: item.source || "openfigi",
+        source: item.source || "eodhd",
         user_id: user.id,
       }));
 
@@ -760,7 +735,7 @@ const DataManager = () => {
 
       await fetchAssets();
       clearSavedFileView();
-      const sources = [...new Set(finalMatching.map(i => i.source || "openfigi"))].join(", ");
+      const sources = [...new Set(finalMatching.map(i => i.source || "eodhd"))].join(", ");
       toast.success(`${rows.length} actif(s) enrichis (sources: ${sources})`);
     } catch (error) {
       console.error("Erreur enrichissement filtres:", error);

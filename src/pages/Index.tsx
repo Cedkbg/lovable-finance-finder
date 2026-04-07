@@ -18,8 +18,8 @@ import { generateProjectDocument } from "@/lib/generate-project-doc";
 
 const SOURCE_ICONS: Record<string, { icon: typeof Database; label: string }> = {
   database: { icon: Database, label: "FROM_DATABASE" },
-  local_dataset: { icon: HardDrive, label: "FROM_LOCAL_DATASET" },
-  openfigi: { icon: Wifi, label: "FROM_OPENFIGI_API" },
+  eodhd: { icon: Wifi, label: "FROM_EODHD_API" },
+  coingecko: { icon: Zap, label: "FROM_COINGECKO" },
 };
 
 const Index = () => {
@@ -125,6 +125,9 @@ const Index = () => {
           <Link to="/dashboard" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Dashboard">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
           </Link>
+          <Link to="/database" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Base de données">
+            <Database className="w-4 h-4 text-muted-foreground" />
+          </Link>
           <button onClick={generateProjectDocument} className="p-2 rounded-lg hover:bg-muted transition-colors" title="Télécharger le Cahier de Projet (Excel)">
             <BookOpen className="w-4 h-4 text-muted-foreground" />
           </button>
@@ -200,7 +203,7 @@ const Index = () => {
               </div>
               <p className="font-mono text-destructive text-sm font-semibold">IDENTIFIER_NOT_FOUND</p>
               <p className="text-muted-foreground text-xs mt-2 font-mono text-center">
-                "{query}" ne correspond à aucun actif<br />(DB + dataset + OpenFIGI)
+                "{query}" ne correspond à aucun actif<br />(DB + EODHD + CoinGecko)
               </p>
             </motion.div>
           )}
@@ -217,7 +220,7 @@ const Index = () => {
 
               <div className="mt-5 flex flex-wrap gap-1.5 justify-center items-center">
                 <span className="label-xs mr-1">Pipeline:</span>
-                {["DATABASE", "DATASET", "OPENFIGI"].map((step, i) => (
+                {["DATABASE", "EODHD", "COINGECKO"].map((step, i) => (
                   <span key={step} className="flex items-center gap-1.5">
                     {i > 0 && <span className="text-muted-foreground text-[10px]">→</span>}
                     <span className="px-2 py-0.5 rounded-md bg-muted text-[10px] font-mono text-muted-foreground">{step}</span>
