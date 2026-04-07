@@ -8,8 +8,8 @@ const EODHD_BASE = "https://eodhd.com/api";
 // Country → Exchange code mapping for EODHD
 const COUNTRY_EXCHANGE_MAP: Record<string, string[]> = {
   // Africa
-  "Morocco": ["CASA"], "Maroc": ["CASA"],
-  "Nigeria": ["NGSE"], "Nigéria": ["NGSE"],
+  "Morocco": ["BC"], "Maroc": ["BC"],
+  "Nigeria": ["XNSA"], "Nigéria": ["XNSA"],
   "Egypt": ["EGX"], "Égypte": ["EGX"],
   "South Africa": ["JSE"], "Afrique du Sud": ["JSE"],
   "Kenya": ["NSE"], 
