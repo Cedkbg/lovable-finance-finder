@@ -4,8 +4,8 @@ import type { SearchHistoryItem } from "@/hooks/use-search-history";
 
 const SOURCE_ICON: Record<string, typeof Database> = {
   database: Database,
-  local_dataset: HardDrive,
-  openfigi: Wifi,
+  eodhd: Wifi,
+  coingecko: HardDrive,
   not_found: XCircle,
 };
 

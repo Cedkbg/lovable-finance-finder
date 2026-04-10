@@ -1,0 +1,1 @@
+ALTER TABLE public.financial_assets ALTER COLUMN source SET DEFAULT 'eodhd';
