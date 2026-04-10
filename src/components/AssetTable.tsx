@@ -41,9 +41,8 @@ const COLUMNS: { key: keyof FinancialAsset; label: string }[] = [
 
 const SOURCE_CONFIG: Record<string, { label: string; icon: typeof Database; className: string }> = {
   database: { label: "DB", icon: Database, className: "bg-primary/10 text-primary border-primary/20" },
-  local_dataset: { label: "LOCAL", icon: HardDrive, className: "bg-accent text-accent-foreground border-accent" },
-  openfigi: { label: "FIGI", icon: Wifi, className: "bg-destructive/10 text-destructive border-destructive/20" },
-  manual: { label: "MANUAL", icon: Database, className: "bg-muted text-muted-foreground border-border" },
+  eodhd: { label: "EODHD", icon: Wifi, className: "bg-destructive/10 text-destructive border-destructive/20" },
+  coingecko: { label: "CRYPTO", icon: HardDrive, className: "bg-accent text-accent-foreground border-accent" },
 };
 
 function SourceBadge({ source }: { source: string }) {
