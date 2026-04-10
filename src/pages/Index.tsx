@@ -63,15 +63,15 @@ const Index = () => {
     setResultTitle("");
     setShowHistory(false);
 
-    const { asset, source: src } = await searchAsset(q);
+    const { assets, source: src } = await searchAsset(q);
 
-    addEntry({ query: q, assetName: asset?.assetName || null, source: src });
+    addEntry({ query: q, assetName: assets[0]?.assetName || null, source: src });
 
-    if (asset) {
-      setResults([asset]);
-      setResultTitle(SOURCE_ICONS[src]?.label || "DATA_RETRIEVED_OK");
+    if (assets.length > 0) {
+      setResults(assets);
+      setResultTitle(`${assets.length} RÉSULTAT${assets.length > 1 ? "S" : ""} — ${SOURCE_ICONS[src]?.label || "DATA_RETRIEVED_OK"}`);
       refreshCount();
-      toast(SOURCE_ICONS[src]?.label || "DATA_RETRIEVED_OK", { duration: 2000 });
+      toast(`${assets.length} actif(s) trouvé(s) via ${src}`, { duration: 2000 });
     } else {
       setNotFound(true);
     }

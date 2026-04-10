@@ -50,128 +50,98 @@ async function getCurrentUserId(): Promise<string | null> {
   return data.user?.id || null;
 }
 
-// Search in database first
-async function searchInDb(query: string): Promise<FinancialAsset | null> {
+// Search in database — return ALL matching results
+async function searchInDb(query: string): Promise<FinancialAsset[]> {
   const q = query.trim().toUpperCase();
 
   const { data, error } = await supabase
     .from("financial_assets")
     .select("*")
-    .or(`isin.eq.${q},ticker.eq.${q},symbol.eq.${q},ric.ilike.%${q}%`)
-    .limit(1)
-    .single();
+    .or(`isin.eq.${q},ticker.eq.${q},symbol.eq.${q},ric.ilike.%${q}%,asset_name.ilike.%${q}%`)
+    .limit(50);
 
-  if (error || !data) return null;
+  if (error || !data || data.length === 0) return [];
 
-  // Check freshness: if older than 24h, mark for refresh
-  const asset = dbToFinancialAsset(data as DbAsset);
-  const age = Date.now() - new Date(asset.updatedAt).getTime();
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-
-  if (age > ONE_DAY) {
-    // Trigger background refresh via EODHD
-    refreshFromEodhd(asset.ticker, asset.micCode, data as DbAsset).catch(() => {});
-  }
-
-  return asset;
+  return (data as DbAsset[]).map(dbToFinancialAsset);
 }
 
-// Background refresh from EODHD
-async function refreshFromEodhd(ticker: string, exchange: string, existing: DbAsset): Promise<void> {
-  if (!ticker) return;
+// Search via EODHD API — return ALL results
+async function searchViaEodhd(query: string): Promise<FinancialAsset[]> {
   try {
     const { data, error } = await supabase.functions.invoke("eodhd-lookup", {
-      body: { mode: "fundamentals", ticker, exchange: exchange || "US" },
-    });
-    if (error || !data?.asset) return;
-
-    const updates: Record<string, any> = {};
-    const a = data.asset;
-    if (a.sector && a.sector !== existing.sector) updates.sector = a.sector;
-    if (a.description && a.description !== existing.description) updates.description = a.description;
-    if (a.country && a.country !== existing.country) updates.country = a.country;
-    if (a.currency && a.currency !== existing.currency) updates.currency = a.currency;
-
-    if (Object.keys(updates).length > 0) {
-      await supabase.from("financial_assets").update(updates).eq("id", existing.id);
-    }
-  } catch {
-    // Silent fail for background refresh
-  }
-}
-
-// Search via EODHD API (replaces OpenFIGI)
-async function searchViaEodhd(query: string): Promise<FinancialAsset | null> {
-  try {
-    // Try search mode first
-    const { data, error } = await supabase.functions.invoke("eodhd-lookup", {
-      body: { mode: "search", query: query.trim(), limit: 5 },
+      body: { mode: "search", query: query.trim(), limit: 50 },
     });
 
-    if (error || !data?.assets?.length) return null;
+    if (error || !data?.assets?.length) return [];
 
-    const best = data.assets[0];
     const userId = await getCurrentUserId();
+    const results: FinancialAsset[] = [];
 
-    // Generate ISIN placeholder if missing
-    if (!best.isin) {
-      best.isin = `NOISIN-${best.ticker || query.trim().toUpperCase()}-${best.country_id || "XX"}`;
+    for (const item of data.assets) {
+      // Generate ISIN placeholder if missing
+      if (!item.isin) {
+        item.isin = `NOISIN-${item.ticker || query.trim().toUpperCase()}-${item.country_id || "XX"}-${item.mic_code || "XX"}`;
+      }
+
+      // Save to DB
+      const { data: inserted, error: insertErr } = await supabase
+        .from("financial_assets")
+        .upsert({ ...item, user_id: userId }, { onConflict: "isin" })
+        .select()
+        .single();
+
+      if (insertErr) {
+        results.push(dbToFinancialAsset({
+          ...item,
+          id: crypto.randomUUID(),
+          user_id: userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as DbAsset));
+      } else {
+        results.push(dbToFinancialAsset(inserted as DbAsset));
+      }
     }
 
-    // Save to DB
-    const { data: inserted, error: insertErr } = await supabase
-      .from("financial_assets")
-      .upsert({ ...best, user_id: userId }, { onConflict: "isin" })
-      .select()
-      .single();
-
-    if (insertErr) {
-      console.warn("Failed to persist EODHD result:", insertErr);
-      return dbToFinancialAsset({
-        ...best,
-        id: crypto.randomUUID(),
-        user_id: userId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      } as DbAsset);
-    }
-
-    return dbToFinancialAsset(inserted as DbAsset);
+    return results;
   } catch (err) {
     console.error("EODHD lookup failed:", err);
-    return null;
+    return [];
   }
 }
 
-// Main search: DB → EODHD → CoinGecko (crypto) → Exchange Rates (forex)
-export async function searchAsset(query: string): Promise<{ asset: FinancialAsset | null; source: string }> {
+// Main search: DB → EODHD → CoinGecko
+export async function searchAsset(query: string): Promise<{ assets: FinancialAsset[]; source: string }> {
   // 1. Database
-  const dbResult = await searchInDb(query);
-  if (dbResult) return { asset: dbResult, source: "database" };
+  const dbResults = await searchInDb(query);
+  if (dbResults.length > 0) return { assets: dbResults, source: "database" };
 
   // 2. EODHD API (real-time)
-  const eodhdResult = await searchViaEodhd(query);
-  if (eodhdResult) return { asset: eodhdResult, source: "eodhd" };
+  const eodhdResults = await searchViaEodhd(query);
+  if (eodhdResults.length > 0) return { assets: eodhdResults, source: "eodhd" };
 
   // 3. CoinGecko for crypto
   try {
     const { data, error } = await supabase.functions.invoke("multi-source-lookup", {
-      body: { source: "coingecko", query: query.trim(), limit: 1 },
+      body: { source: "coingecko", query: query.trim(), limit: 10 },
     });
     if (!error && data?.assets?.length) {
-      const asset = data.assets[0];
       const userId = await getCurrentUserId();
-      if (!asset.isin) asset.isin = `CRYPTO-${asset.ticker || query.trim().toUpperCase()}`;
-      const { data: inserted } = await supabase
-        .from("financial_assets")
-        .upsert({ ...asset, user_id: userId }, { onConflict: "isin" })
-        .select()
-        .single();
-      if (inserted) return { asset: dbToFinancialAsset(inserted as DbAsset), source: "coingecko" };
+      const results: FinancialAsset[] = [];
+      for (const asset of data.assets) {
+        if (!asset.isin) asset.isin = `CRYPTO-${asset.ticker || query.trim().toUpperCase()}-${asset.symbol || "XX"}`;
+        const { data: inserted } = await supabase
+          .from("financial_assets")
+          .upsert({ ...asset, user_id: userId }, { onConflict: "isin" })
+          .select()
+          .single();
+        if (inserted) results.push(dbToFinancialAsset(inserted as DbAsset));
+      }
+      if (results.length > 0) return { assets: results, source: "coingecko" };
     }
   } catch {}
 
-  return { asset: null, source: "not_found" };
+  return { assets: [], source: "not_found" };
 }
 
 // Bulk enrich: array of identifiers
@@ -185,8 +155,8 @@ export async function bulkEnrich(
     const id = identifiers[i].trim();
     if (!id) continue;
 
-    const { asset, source } = await searchAsset(id);
-    results.push({ identifier: id, asset, source });
+    const { assets, source } = await searchAsset(id);
+    results.push({ identifier: id, asset: assets[0] || null, source });
     onProgress?.(i + 1, identifiers.length);
   }
 
