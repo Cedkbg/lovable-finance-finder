@@ -46,7 +46,7 @@ const SOURCE_CONFIG: Record<string, { label: string; icon: typeof Database; clas
 };
 
 function SourceBadge({ source }: { source: string }) {
-  const config = SOURCE_CONFIG[source] || SOURCE_CONFIG.manual;
+  const config = SOURCE_CONFIG[source] || SOURCE_CONFIG.eodhd;
   const Icon = config.icon;
   return (
     <Badge variant="outline" className={`text-[9px] font-mono gap-1 px-1.5 py-0.5 ${config.className}`}>
