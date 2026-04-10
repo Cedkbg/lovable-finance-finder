@@ -5,6 +5,54 @@ const corsHeaders = {
 
 const EODHD_BASE = "https://eodhd.com/api";
 
+// EODHD exchange code → ISO 10383 MIC code mapping
+const EODHD_TO_MIC: Record<string, string> = {
+  // Americas
+  "US": "XNAS", "NYSE": "XNYS", "NASDAQ": "XNAS",
+  "TO": "XTSE", "V": "XTSX", "CN": "XCNQ",
+  "SA": "BVMF", "MX": "XMEX", "BA": "XBUE",
+  "SN": "XSGO", "CL": "XBOG", "LM": "XLIM",
+  // Europe
+  "PA": "XPAR", "XETRA": "XETR", "BE": "XBER", "F": "XFRA",
+  "LSE": "XLON", "SW": "XSWX", "AS": "XAMS",
+  "MC": "XMAD", "MI": "XMIL", "BR": "XBRU",
+  "LS": "XLIS", "VI": "XWBO", "ST": "XSTO",
+  "OL": "XOSL", "CO": "XCSE", "HE": "XHEL",
+  "IR": "XDUB", "WAR": "XWAR", "AT": "XATH",
+  "IS": "XIST", "MCX": "MISX", "BUD": "XBUD",
+  "PR": "XPRA",
+  // Asia
+  "TSE": "XTKS", "SHG": "XSHG", "SHE": "XSHE",
+  "HK": "XHKG", "NSE": "XNSE", "BSE": "XBOM",
+  "KO": "XKRX", "TW": "XTAI", "SGX": "XSES",
+  "JK": "XIDX", "KLSE": "XKLS", "BK": "XBKK",
+  "PSE": "XPHS", "VN": "XHNX", "KAR": "XKAR",
+  "DH": "XDHA", "CSE": "XCOL",
+  // Oceania
+  "AU": "XASX", "NZ": "XNZE",
+  // Middle East
+  "SR": "XSAU", "ADX": "XADS", "TA": "XTAE",
+  "QA": "DSMD", "KW": "XKUW",
+  // Africa
+  "BC": "XCAS", "XNSA": "XNSA", "EGX": "XCAI",
+  "JSE": "XJSE", "NSX": "XNAM",
+  "TN": "XTUN", "GSE": "XGHA", "SEM": "XMAU",
+  "DSE": "XDAR", "USE": "XUGA", "ZSE": "XZIM",
+  "LuSE": "XLUS", "RSE": "XRWA", "BRVM": "XBRV",
+  // Others
+  "MP": "XMAU", "ZL": "XNZE", "UG": "XUGA",
+  "MW": "XMAL", "KN": "XNAI", "SJ": "XJSE",
+  "IN": "XNSE",
+};
+
+function toMicCode(eodhdExchange: string): string {
+  if (!eodhdExchange) return "";
+  const upper = eodhdExchange.trim().toUpperCase();
+  // Already a proper MIC (starts with X and 4 chars)?
+  if (upper.length === 4 && upper.startsWith("X")) return upper;
+  return EODHD_TO_MIC[eodhdExchange.trim()] || EODHD_TO_MIC[upper] || eodhdExchange;
+}
+
 // Country → Exchange code mapping for EODHD
 const COUNTRY_EXCHANGE_MAP: Record<string, string[]> = {
   // Africa
