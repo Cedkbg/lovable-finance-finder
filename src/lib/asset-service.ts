@@ -110,15 +110,15 @@ async function searchViaEodhd(query: string): Promise<FinancialAsset[]> {
   }
 }
 
-// Main search: DB → EODHD → CoinGecko
+// Main search: EODHD (live) → CoinGecko — always real-time, never local-only
 export async function searchAsset(query: string): Promise<{ assets: FinancialAsset[]; source: string }> {
-  // 1. Database
-  const dbResults = await searchInDb(query);
-  if (dbResults.length > 0) return { assets: dbResults, source: "database" };
-
-  // 2. EODHD API (real-time)
+  // 1. EODHD API (always live / real-time first)
   const eodhdResults = await searchViaEodhd(query);
   if (eodhdResults.length > 0) return { assets: eodhdResults, source: "eodhd" };
+
+  // 2. Fallback: database (only if EODHD is unavailable)
+  const dbResults = await searchInDb(query);
+  if (dbResults.length > 0) return { assets: dbResults, source: "database (fallback)" };
 
   // 3. CoinGecko for crypto
   try {
