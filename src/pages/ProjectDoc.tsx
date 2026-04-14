@@ -79,8 +79,8 @@ export default function ProjectDoc() {
           <Table headers={["Module", "Fonctionnalité", "Description", "Statut"]} rows={[
             ["Recherche", "Recherche unitaire", "Saisir un ISIN, ticker ou identifiant pour enrichir un actif", "✅"],
             ["Recherche", "Détection auto du type", "Détecte si l'entrée est ISIN, CUSIP, SEDOL, FIGI ou Ticker", "✅"],
-            ["Recherche", "Multi-stratégie", "Essaie Mapping puis Search sur OpenFIGI", "✅"],
-            ["Recherche", "Fallback mock data", "Cherche dans un jeu de données local si l'API est indisponible", "✅"],
+            ["Recherche", "Multi-stratégie", "Recherche en temps réel via EODHD puis CoinGecko (crypto)", "✅"],
+            ["Recherche", "Fallback DB", "Si l'API est indisponible, cherche dans la base de données locale", "✅"],
             ["Import", "Import bulk", "Coller une liste d'identifiants séparés par virgules/retours ligne", "✅"],
             ["Import", "Import par pays", "Sélectionner un pays pour importer tous les actifs de ses bourses", "✅"],
             ["Import", "Multi-exchange", "Interroge toutes les bourses d'un pays simultanément", "✅"],
