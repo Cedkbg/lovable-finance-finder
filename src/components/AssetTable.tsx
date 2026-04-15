@@ -264,6 +264,7 @@ const AssetTable = ({ assets, title, showExport = true, showSave = true }: Asset
                   </TableCell>
                 )}
               </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>
