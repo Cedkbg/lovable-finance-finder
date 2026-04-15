@@ -220,8 +220,10 @@ const AssetTable = ({ assets, title, showExport = true, showSave = true }: Asset
                   </span>
                 </TableHead>
               ))}
+              {showSave && (
+                <TableHead className="font-mono text-[10px] px-2 py-2 whitespace-nowrap">Action</TableHead>
+              )}
             </TableRow>
-          </TableHeader>
           <TableBody>
             {pageAssets.map((asset, idx) => (
               <TableRow key={asset.id + idx} className="hover:bg-muted/50">
