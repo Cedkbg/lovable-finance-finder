@@ -19,6 +19,7 @@ interface AssetTableProps {
   assets: FinancialAsset[];
   title?: string;
   showExport?: boolean;
+  showSave?: boolean;
 }
 
 const COLUMNS: { key: keyof FinancialAsset; label: string }[] = [
