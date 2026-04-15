@@ -1,9 +1,11 @@
 import { useState, useMemo } from "react";
-import { Download, Filter, ChevronLeft, ChevronRight, Database, HardDrive, Wifi } from "lucide-react";
+import { Download, Filter, ChevronLeft, ChevronRight, Database, HardDrive, Wifi, Save, Check, Loader2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import { toast } from "sonner";
 import type { FinancialAsset } from "@/lib/mock-data";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
   TableHeader,
@@ -17,6 +19,7 @@ interface AssetTableProps {
   assets: FinancialAsset[];
   title?: string;
   showExport?: boolean;
+  showSave?: boolean;
 }
 
 const COLUMNS: { key: keyof FinancialAsset; label: string }[] = [
@@ -72,7 +75,45 @@ export function exportToExcel(assets: FinancialAsset[], filename = "enriched_ass
   saveAs(new Blob([buf], { type: "application/octet-stream" }), `${filename}.xlsx`);
 }
 
-const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
+const AssetTable = ({ assets, title, showExport = true, showSave = true }: AssetTableProps) => {
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  const handleSave = async (asset: FinancialAsset) => {
+    setSavingIds((prev) => new Set(prev).add(asset.id));
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        toast.error("Connectez-vous pour sauvegarder");
+        return;
+      }
+      const { error } = await supabase.from("financial_assets").upsert({
+        asset_name: asset.assetName,
+        isin: asset.isin,
+        sector: asset.sector || null,
+        acf: asset.acf || null,
+        ric: asset.ric || null,
+        ticker: asset.ticker || null,
+        symbol: asset.symbol || null,
+        country_id: asset.countryId || null,
+        country: asset.country || null,
+        mic_code: asset.micCode || null,
+        currency_id: asset.currencyId || null,
+        currency: asset.currency || null,
+        description: asset.description || null,
+        source: asset.source || "eodhd",
+        user_id: userData.user.id,
+      }, { onConflict: "isin" });
+
+      if (error) throw error;
+      setSavedIds((prev) => new Set(prev).add(asset.id));
+      toast.success(`${asset.assetName || asset.ticker} sauvegardé !`);
+    } catch (err: any) {
+      toast.error(`Erreur: ${err.message}`);
+    } finally {
+      setSavingIds((prev) => { const n = new Set(prev); n.delete(asset.id); return n; });
+    }
+  };
   const [page, setPage] = useState(0);
   const [sectorFilter, setSectorFilter] = useState("");
   const [sortKey, setSortKey] = useState<keyof FinancialAsset | "">("");
@@ -179,6 +220,9 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
                   </span>
                 </TableHead>
               ))}
+              {showSave && (
+                <TableHead className="font-mono text-[10px] px-2 py-2 whitespace-nowrap">Action</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -202,6 +246,23 @@ const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
                     )}
                   </TableCell>
                 ))}
+                {showSave && (
+                  <TableCell className="px-2 py-1.5">
+                    <button
+                      onClick={() => handleSave(asset)}
+                      disabled={savingIds.has(asset.id) || savedIds.has(asset.id)}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md font-mono text-[10px] font-medium transition-colors disabled:opacity-60 bg-primary/10 text-primary hover:bg-primary/20 disabled:hover:bg-primary/10"
+                    >
+                      {savedIds.has(asset.id) ? (
+                        <><Check className="w-3 h-3" /> Sauvé</>
+                      ) : savingIds.has(asset.id) ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" /> ...</>
+                      ) : (
+                        <><Save className="w-3 h-3" /> Sauvegarder</>
+                      )}
+                    </button>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
