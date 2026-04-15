@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User, FileSpreadsheet, GitCompare, BookOpen } from "lucide-react";
+import { Search, Database, Wifi, HardDrive, Zap, BarChart3, LogOut, User, FileSpreadsheet, GitCompare } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { searchAsset } from "@/lib/asset-service";
@@ -14,7 +14,6 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { useSearchHistory } from "@/hooks/use-search-history";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { generateProjectDocument } from "@/lib/generate-project-doc";
 
 const SOURCE_ICONS: Record<string, { icon: typeof Database; label: string }> = {
   database: { icon: Database, label: "FROM_DATABASE" },
@@ -128,9 +127,6 @@ const Index = () => {
           <Link to="/database" className="p-2 rounded-lg hover:bg-muted transition-colors" title="Base de données">
             <Database className="w-4 h-4 text-muted-foreground" />
           </Link>
-          <button onClick={generateProjectDocument} className="p-2 rounded-lg hover:bg-muted transition-colors" title="Télécharger le Cahier de Projet (Excel)">
-            <BookOpen className="w-4 h-4 text-muted-foreground" />
-          </button>
           <ThemeToggle />
           <div className="flex items-center gap-1.5 pl-2 border-l border-border">
             <Link to="/profile" className="flex items-center gap-1.5 rounded-lg hover:bg-muted p-1 transition-colors" title="Modifier le profil">
