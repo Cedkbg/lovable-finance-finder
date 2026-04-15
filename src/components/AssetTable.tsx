@@ -246,8 +246,24 @@ const AssetTable = ({ assets, title, showExport = true, showSave = true }: Asset
                     )}
                   </TableCell>
                 ))}
+                {showSave && (
+                  <TableCell className="px-2 py-1.5">
+                    <button
+                      onClick={() => handleSave(asset)}
+                      disabled={savingIds.has(asset.id) || savedIds.has(asset.id)}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md font-mono text-[10px] font-medium transition-colors disabled:opacity-60 bg-primary/10 text-primary hover:bg-primary/20 disabled:hover:bg-primary/10"
+                    >
+                      {savedIds.has(asset.id) ? (
+                        <><Check className="w-3 h-3" /> Sauvé</>
+                      ) : savingIds.has(asset.id) ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" /> ...</>
+                      ) : (
+                        <><Save className="w-3 h-3" /> Sauvegarder</>
+                      )}
+                    </button>
+                  </TableCell>
+                )}
               </TableRow>
-            ))}
           </TableBody>
         </Table>
       </div>
