@@ -16,6 +16,7 @@ import Compare from "./pages/Compare";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import DatabaseExplorer from "./pages/DatabaseExplorer";
+import LiveData from "./pages/LiveData";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/compare" element={<ProtectedRoute><Compare /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/database" element={<ProtectedRoute><DatabaseExplorer /></ProtectedRoute>} />
+              <Route path="/live" element={<ProtectedRoute><LiveData /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
