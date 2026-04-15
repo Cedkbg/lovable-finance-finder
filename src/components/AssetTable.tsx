@@ -75,7 +75,45 @@ export function exportToExcel(assets: FinancialAsset[], filename = "enriched_ass
   saveAs(new Blob([buf], { type: "application/octet-stream" }), `${filename}.xlsx`);
 }
 
-const AssetTable = ({ assets, title, showExport = true }: AssetTableProps) => {
+const AssetTable = ({ assets, title, showExport = true, showSave = true }: AssetTableProps) => {
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  const handleSave = async (asset: FinancialAsset) => {
+    setSavingIds((prev) => new Set(prev).add(asset.id));
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        toast.error("Connectez-vous pour sauvegarder");
+        return;
+      }
+      const { error } = await supabase.from("financial_assets").upsert({
+        asset_name: asset.assetName,
+        isin: asset.isin,
+        sector: asset.sector || null,
+        acf: asset.acf || null,
+        ric: asset.ric || null,
+        ticker: asset.ticker || null,
+        symbol: asset.symbol || null,
+        country_id: asset.countryId || null,
+        country: asset.country || null,
+        mic_code: asset.micCode || null,
+        currency_id: asset.currencyId || null,
+        currency: asset.currency || null,
+        description: asset.description || null,
+        source: asset.source || "eodhd",
+        user_id: userData.user.id,
+      }, { onConflict: "isin" });
+
+      if (error) throw error;
+      setSavedIds((prev) => new Set(prev).add(asset.id));
+      toast.success(`${asset.assetName || asset.ticker} sauvegardé !`);
+    } catch (err: any) {
+      toast.error(`Erreur: ${err.message}`);
+    } finally {
+      setSavingIds((prev) => { const n = new Set(prev); n.delete(asset.id); return n; });
+    }
+  };
   const [page, setPage] = useState(0);
   const [sectorFilter, setSectorFilter] = useState("");
   const [sortKey, setSortKey] = useState<keyof FinancialAsset | "">("");
